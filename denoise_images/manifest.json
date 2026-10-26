@@ -1,0 +1,287 @@
+{
+  "seed": 42,
+  "images": [
+    {
+      "path": "clean/astronaut.png",
+      "reference": null,
+      "category": "clean",
+      "parameters": {},
+      "sha256": "88431cd9653ccd539741b555fb0a46b61558b301d4110412b5bc28b5e3ea6cb5",
+      "shape": [
+        512,
+        512,
+        3
+      ]
+    },
+    {
+      "path": "noisy/astronaut_gaussian20.png",
+      "reference": "clean/astronaut.png",
+      "category": "gaussian",
+      "parameters": {
+        "sigma": 20
+      },
+      "sha256": "c986d92caf72dc5b9702be2c00daebaf10fc06673c000a59ee1ecb0a703b74ea",
+      "shape": [
+        512,
+        512,
+        3
+      ]
+    },
+    {
+      "path": "noisy/astronaut_salt_pepper04.png",
+      "reference": "clean/astronaut.png",
+      "category": "salt_pepper",
+      "parameters": {
+        "probability": 0.04
+      },
+      "sha256": "96b589ae2636f5fd126dc28c3cdedd0b8a4aac6621691817208bc3d21fd65f6b",
+      "shape": [
+        512,
+        512,
+        3
+      ]
+    },
+    {
+      "path": "clean/camera.png",
+      "reference": null,
+      "category": "clean",
+      "parameters": {},
+      "sha256": "b0793d2adda0fa6ae899c03989482bff9a42d3d5690fc7e3648f2795d730c23a",
+      "shape": [
+        512,
+        512
+      ]
+    },
+    {
+      "path": "noisy/camera_gaussian20.png",
+      "reference": "clean/camera.png",
+      "category": "gaussian",
+      "parameters": {
+        "sigma": 20
+      },
+      "sha256": "03febd505654a99052f3e08ff1cf5e6bb0b9f0d2c690b4f1d3c779d3e7955f6b",
+      "shape": [
+        512,
+        512
+      ]
+    },
+    {
+      "path": "noisy/camera_salt_pepper04.png",
+      "reference": "clean/camera.png",
+      "category": "salt_pepper",
+      "parameters": {
+        "probability": 0.04
+      },
+      "sha256": "b4ccf6f395c6a074d7b270e6437832a0e090571d210bba6dbdd6c0264ff78b47",
+      "shape": [
+        512,
+        512
+      ]
+    },
+    {
+      "path": "clean/coffee.png",
+      "reference": null,
+      "category": "clean",
+      "parameters": {},
+      "sha256": "cc02f8ca188b167c775a7101b5d767d1e71792cf762c33d6fa15a4599b5a8de7",
+      "shape": [
+        400,
+        600,
+        3
+      ]
+    },
+    {
+      "path": "noisy/coffee_gaussian20.png",
+      "reference": "clean/coffee.png",
+      "category": "gaussian",
+      "parameters": {
+        "sigma": 20
+      },
+      "sha256": "4a30a8ed74c8f5bbf18755c343473ad5386bf07e607cf0ae17c64dff5be9c351",
+      "shape": [
+        400,
+        600,
+        3
+      ]
+    },
+    {
+      "path": "noisy/coffee_salt_pepper04.png",
+      "reference": "clean/coffee.png",
+      "category": "salt_pepper",
+      "parameters": {
+        "probability": 0.04
+      },
+      "sha256": "c97ca42abcebc3a7d399aec420ce1309e12381767b052e246c07595cf8ec5e19",
+      "shape": [
+        400,
+        600,
+        3
+      ]
+    },
+    {
+      "path": "clean/portrait.png",
+      "reference": null,
+      "category": "clean",
+      "parameters": {},
+      "sha256": "6b863ede951b145d101cbc6ac3ef46f551a15083f338fd1880bf1e1d07192b99",
+      "shape": [
+        500,
+        480,
+        3
+      ]
+    },
+    {
+      "path": "noisy/portrait_gaussian20.png",
+      "reference": "clean/portrait.png",
+      "category": "gaussian",
+      "parameters": {
+        "sigma": 20
+      },
+      "sha256": "7fd34ba3e86393d1be57d26f9b814b2b1c6e2bff33052211f8d3f08fa2f29789",
+      "shape": [
+        500,
+        480,
+        3
+      ]
+    },
+    {
+      "path": "noisy/portrait_salt_pepper04.png",
+      "reference": "clean/portrait.png",
+      "category": "salt_pepper",
+      "parameters": {
+        "probability": 0.04
+      },
+      "sha256": "c19c2a760ac2c4dc2531196f783977c2d2044fda19e9b0fda1f2cc3c9da16fb4",
+      "shape": [
+        500,
+        480,
+        3
+      ]
+    },
+    {
+      "path": "clean/edges.png",
+      "reference": null,
+      "category": "clean",
+      "parameters": {},
+      "sha256": "fab1155abd30a8e48077bbca2deb52a33d40d719500002a6194cdedc910d6502",
+      "shape": [
+        480,
+        640,
+        3
+      ]
+    },
+    {
+      "path": "noisy/edges_gaussian20.png",
+      "reference": "clean/edges.png",
+      "category": "gaussian",
+      "parameters": {
+        "sigma": 20
+      },
+      "sha256": "17abd61935d7cea0114258efc0e2906c5fa3410a6d21f60a04647431a831c58c",
+      "shape": [
+        480,
+        640,
+        3
+      ]
+    },
+    {
+      "path": "noisy/edges_salt_pepper04.png",
+      "reference": "clean/edges.png",
+      "category": "salt_pepper",
+      "parameters": {
+        "probability": 0.04
+      },
+      "sha256": "36e50adc5d27752fd667365bc92adf9e0d2d4b3f35af4c160ab05b16fd7b12ec",
+      "shape": [
+        480,
+        640,
+        3
+      ]
+    },
+    {
+      "path": "noisy/portrait_mixed.png",
+      "reference": "clean/portrait.png",
+      "category": "mixed",
+      "parameters": {
+        "sigma": 12,
+        "probability": 0.02
+      },
+      "sha256": "4102a8645a942452dad272aaef0a76a8ce8199452cc1d9bd3ba83b7e3137716f",
+      "shape": [
+        500,
+        480,
+        3
+      ]
+    },
+    {
+      "path": "noisy/portrait_simulated_spots.png",
+      "reference": "clean/portrait.png",
+      "category": "simulated_spots",
+      "parameters": {
+        "note": "Artificial red dots; not real acne"
+      },
+      "sha256": "0a7397cb47d747145ce63b1b9f1ba20836b81438444012656eb8022a0e37099c",
+      "shape": [
+        500,
+        480,
+        3
+      ]
+    },
+    {
+      "path": "exposure/night.png",
+      "reference": null,
+      "category": "simulated_low_light",
+      "parameters": {
+        "gamma": 2.2
+      },
+      "sha256": "830949ec9a58df7a1e063cf5fcb9c160bd4022a60be7543954e71a7f4aabd849",
+      "shape": [
+        400,
+        600,
+        3
+      ]
+    },
+    {
+      "path": "exposure/night_gaussian12.png",
+      "reference": "exposure/night.png",
+      "category": "gaussian_low_light",
+      "parameters": {
+        "sigma": 12
+      },
+      "sha256": "5e97c8be5bd0c8c9697c606ddab4f765635f829ed996130b8e38616c3b9359c7",
+      "shape": [
+        400,
+        600,
+        3
+      ]
+    },
+    {
+      "path": "exposure/backlit.png",
+      "reference": null,
+      "category": "simulated_backlit",
+      "parameters": {
+        "note": "Spatial brightness mask; not a real backlit capture"
+      },
+      "sha256": "7fcdc8fdb5260a587d13111c3e5e26873ebc41e50e9f30f88a8188b37cfc00dd",
+      "shape": [
+        512,
+        512,
+        3
+      ]
+    },
+    {
+      "path": "exposure/backlit_gaussian12.png",
+      "reference": "exposure/backlit.png",
+      "category": "gaussian_backlit",
+      "parameters": {
+        "sigma": 12
+      },
+      "sha256": "09244e2db86d48cfeb8a4b78aa320c0d2158844b4a28272ded0c85d4247cbd1d",
+      "shape": [
+        512,
+        512,
+        3
+      ]
+    }
+  ]
+}

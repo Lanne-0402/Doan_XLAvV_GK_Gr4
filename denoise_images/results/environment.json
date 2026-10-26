@@ -1,0 +1,10 @@
+{
+  "opencv": "5.0.0",
+  "numpy": "2.5.2",
+  "sizes": [
+    3,
+    5,
+    9
+  ],
+  "timing": "median of 3 runs after warmup, I/O excluded"
+}

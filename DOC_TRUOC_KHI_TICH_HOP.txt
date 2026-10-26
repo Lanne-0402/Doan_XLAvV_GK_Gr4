@@ -1,0 +1,57 @@
+BÀN GIAO MÔ-ĐUN 2 - LÀM MỊN VÀ KHỬ NHIỄU
+========================================
+Người nhận: LAN (giao diện/tích hợp), TOÀN (sketch/pipeline).
+
+1. Thành phần bàn giao
+- module_denoise.py: mã nguồn chính, bốn bộ lọc Mean, Gaussian, Median, Bilateral.
+- denoise_images/: 21 ảnh thử, nguồn ảnh, hướng dẫn, mã tạo lại dữ liệu,
+  mã kiểm thử và kết quả thực nghiệm 168 phép đo ở kích thước 3, 5, 9.
+- main_app.py: bản giao diện tham chiếu đã được dùng để kiểm tra lời gọi.
+  Nếu nhóm đang có bản mới hơn, giữ bản mới của nhóm; chỉ ghép mô-đun lọc.
+- requirements.txt: thư viện cho mô-đun lọc và các công cụ thử nghiệm đi kèm.
+
+2. LAN - ghép vào giao diện
+- Sao chép module_denoise.py và thư mục denoise_images cạnh main_app.py
+  trong project chung. Không cần sửa bốn lời gọi lọc trong bản tham chiếu.
+- Cài: python -m pip install -r requirements.txt
+- Bốn hàm:
+  apply_mean_filter(img, ksize=5)
+  apply_gaussian_filter(img, ksize=5, sigma=0.0)
+  apply_median_filter(img, ksize=5)
+  apply_bilateral_filter(img, d=9, sigma_color=75.0, sigma_space=75.0)
+- Ảnh vào/ra: NumPy uint8, ảnh xám (H,W) hoặc BGR (H,W,3).
+  Kích thước và số kênh được giữ nguyên; không sửa ảnh đầu vào.
+- None trả None. Ảnh/tham số không hợp lệ phát sinh TypeError/ValueError.
+- Khi so sánh các bộ lọc, tắt Chaining để dùng cùng một ảnh đầu vào.
+
+3. TOÀN - ghép pipeline và sketch
+  import module_denoise as denoise
+  cleaned = denoise.apply_median_filter(img, ksize=3)
+  smooth = denoise.apply_bilateral_filter(cleaned, d=9,
+                                         sigma_color=75, sigma_space=75)
+- cleaned/smooth có thể truyền tiếp vào mô-đun sketch.
+- Có thể tái sử dụng apply_gaussian_filter cho bước làm mờ ảnh âm bản;
+  tự chọn ksize theo độ nét chì mong muốn (ví dụ 21), không phụ thuộc
+  giới hạn 3..15 của thanh trượt lọc trên giao diện.
+- Không cần gọi cả hai bộ lọc trong mọi trường hợp: chọn theo loại nhiễu.
+
+4. Kiểm tra và báo cáo
+Chạy từ thư mục đã giải nén hoặc project chung:
+  python denoise_images/test_denoise.py
+  python denoise_images/compare_filters.py --sizes 3 5 9
+- 8 nhóm kiểm thử đã đạt, gồm lời gọi mod2 trong main_app.py tham chiếu.
+- Kết quả sẵn có: denoise_images/results/metrics.csv và các ảnh comparison.
+- Thông tin môi trường đo: denoise_images/results/environment.json.
+- Đọc denoise_images/README.txt để biết cách đánh giá và nguồn dữ liệu.
+- Ảnh thiếu sáng/ngược sáng, nhiễu và đốm đỏ trên da là dữ liệu giả lập.
+  Bộ lọc không tự nhận diện hoặc xóa từng nốt mụn.
+
+5. Điều kiện chạy toàn bộ ứng dụng
+- Gói này là phần bàn giao của mô-đun 2, chưa phải toàn bộ project.
+- main_app.py bắt buộc có module_enhance.py của LAN để khởi động.
+- Cần module_sketch.py của TOÀN để bật đầy đủ chức năng sketch.
+- Hai mô-đun trên và các thư viện riêng của chúng do nhóm bổ sung.
+- Chưa xác nhận chạy toàn bộ GUI; đã kiểm tra các lời gọi mô-đun lọc
+  mà không mở GUI và thực nghiệm trên ảnh.
+- File requirements.txt không bao gồm các phụ thuộc riêng chưa biết
+  của hai mô-đun còn lại.
