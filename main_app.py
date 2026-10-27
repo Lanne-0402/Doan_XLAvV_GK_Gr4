@@ -730,6 +730,16 @@ class PhotoEnhancerSketchApp:
         if self.img_original is None:
             return
         gamma = float(self.gamma_var.get())
+        blur_k = int(self.sketch_blur_var.get())
+
+        # Sử dụng hàm pipeline do Toàn (Thành viên 3) phụ trách
+        if HAS_MOD3 and hasattr(mod3, "pipeline_enhance_denoise_sketch"):
+            res = mod3.pipeline_enhance_denoise_sketch(
+                self.img_original, gamma=gamma, median_ksize=3, sketch_ksize=blur_k
+            )
+            self._update_result(res, "Pipeline: Tăng sáng + Khử nhiễu + Sketch Art")
+            return
+
         step1 = mod1.apply_gamma_transform(self.img_original, gamma=gamma)
         if HAS_MOD2 and mod2 is not None:
             step2 = mod2.apply_median_filter(step1, ksize=3)
@@ -737,7 +747,6 @@ class PhotoEnhancerSketchApp:
             step2 = step1
 
         if HAS_MOD3 and mod3 is not None:
-            blur_k = int(self.sketch_blur_var.get())
             step3 = mod3.apply_pencil_sketch(step2, blur_ksize=blur_k)
             self._update_result(step3, "Pipeline: Tăng sáng + Khử nhiễu + Sketch Art")
         else:
