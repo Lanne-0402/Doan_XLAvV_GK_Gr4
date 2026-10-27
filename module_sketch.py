@@ -122,3 +122,61 @@ def pipeline_enhance_denoise_sketch(
     # Bước 3: Tạo tranh phác thảo chì bằng Color Dodge (Mô-đun 3)
     sketch = apply_pencil_sketch(denoised, blur_ksize=sketch_ksize)
     return sketch
+
+
+def pipeline_custom_stack(
+    img: np.ndarray,
+    gamma: float | None = None,
+    median_ksize: int | None = None,
+    bilateral_d: int | None = None,
+    sketch_mode: str | None = None,
+    sketch_ksize: int = 21,
+) -> np.ndarray:
+    """
+    [THÀNH VIÊN 3 - TOÀN] Bộ phối hợp đè nhiều hiệu ứng tùy chọn (Custom Stack Pipeline):
+    Cho phép đè tuần tự các bước:
+    - Bù sáng Gamma
+    - Khử nhiễu Median
+    - Làm mịn da Bilateral
+    - Phác thảo tranh vẽ ('pencil' hoặc 'sobel')
+    """
+    if img is None:
+        return None
+
+    curr = img.copy()
+
+    # 1. Bù sáng Gamma
+    if gamma is not None:
+        try:
+            import module_enhance as mod1
+            curr = mod1.apply_gamma_transform(curr, gamma=gamma)
+        except Exception:
+            img_f = curr.astype(np.float32) / 255.0
+            curr = np.clip(np.power(img_f, max(0.1, gamma)) * 255.0, 0, 255).astype(np.uint8)
+
+    # 2. Khử nhiễu Median
+    if median_ksize is not None:
+        try:
+            import module_denoise as mod2
+            curr = mod2.apply_median_filter(curr, ksize=median_ksize)
+        except Exception:
+            k = max(3, int(median_ksize))
+            if k % 2 == 0:
+                k += 1
+            curr = cv2.medianBlur(curr, k)
+
+    # 3. Làm mịn Bilateral
+    if bilateral_d is not None:
+        try:
+            import module_denoise as mod2
+            curr = mod2.apply_bilateral_filter(curr, d=bilateral_d, sigma_color=75, sigma_space=75)
+        except Exception:
+            curr = cv2.bilateralFilter(curr, d=int(bilateral_d), sigmaColor=75, sigmaSpace=75)
+
+    # 4. Tạo tranh vẽ Sketch
+    if sketch_mode == "pencil":
+        curr = apply_pencil_sketch(curr, blur_ksize=sketch_ksize)
+    elif sketch_mode == "sobel":
+        curr = apply_sobel_sketch(curr, ksize=3)
+
+    return curr

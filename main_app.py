@@ -66,7 +66,10 @@ class PhotoEnhancerSketchApp:
         self.img_original: np.ndarray = None
         self.img_processed: np.ndarray = None
         self.last_operation_name: str = "Ảnh sau xử lý"
-        self.chain_mode = tk.BooleanVar(value=False)
+        # Bật mặc định chế độ đè hiệu ứng để không bị mất kết quả khi áp dụng hiệu ứng tiếp theo
+        self.chain_mode = tk.BooleanVar(value=True)
+        self.history_stack: list[tuple[np.ndarray, str, list[str]]] = []
+        self.chain_steps: list[str] = ["Gốc"]
 
         self._build_ui()
         # Khởi tạo sẵn một bức ảnh mẫu thiếu sáng để có thể bấm thử ngay lập tức
@@ -96,19 +99,40 @@ class PhotoEnhancerSketchApp:
         left_container.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
         left_container.pack_propagate(False)
 
-        canvas_ctrl = tk.Canvas(left_container, bg="#f4f6f9", highlightthickness=0)
-        scrollbar = ttk.Scrollbar(left_container, orient="vertical", command=canvas_ctrl.yview)
-        self.ctrl_frame = tk.Frame(canvas_ctrl, bg="#f4f6f9")
+        self.canvas_ctrl = tk.Canvas(left_container, bg="#f4f6f9", highlightthickness=0)
+        scrollbar = ttk.Scrollbar(left_container, orient="vertical", command=self.canvas_ctrl.yview)
+        self.ctrl_frame = tk.Frame(self.canvas_ctrl, bg="#f4f6f9")
 
         self.ctrl_frame.bind(
             "<Configure>",
-            lambda e: canvas_ctrl.configure(scrollregion=canvas_ctrl.bbox("all")),
+            lambda e: self.canvas_ctrl.configure(scrollregion=self.canvas_ctrl.bbox("all")),
         )
-        canvas_ctrl.create_window((0, 0), window=self.ctrl_frame, anchor="nw", width=320)
-        canvas_ctrl.configure(yscrollcommand=scrollbar.set)
+        self.canvas_win = self.canvas_ctrl.create_window((0, 0), window=self.ctrl_frame, anchor="nw", width=320)
+        self.canvas_ctrl.configure(yscrollcommand=scrollbar.set)
 
-        canvas_ctrl.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        # Tự động co giãn frame điều khiển theo chiều ngang canvas
+        self.canvas_ctrl.bind(
+            "<Configure>",
+            lambda e: self.canvas_ctrl.itemconfig(self.canvas_win, width=e.width),
+        )
+
+        self.canvas_ctrl.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Hỗ trợ lăn chuột mượt mà khi con trỏ ở trên panel bên trái
+        def _on_mousewheel(event):
+            x, y = self.root.winfo_pointerx(), self.root.winfo_pointery()
+            widget = self.root.winfo_containing(x, y)
+            w = widget
+            while w is not None:
+                if w in (left_container, self.canvas_ctrl, self.ctrl_frame):
+                    # Cuộn theo số nấc chuột
+                    delta = event.delta if hasattr(event, "delta") and event.delta else 120
+                    self.canvas_ctrl.yview_scroll(int(-1 * (delta / 60)), "units")
+                    break
+                w = getattr(w, "master", None)
+
+        self.root.bind_all("<MouseWheel>", _on_mousewheel)
 
         # --- KHUNG HIỂN THỊ ẢNH TRƯỚC - SAU BÊN PHẢI ---
         right_frame = tk.Frame(main_frame, bg="#ffffff", bd=1, relief=tk.SOLID)
@@ -166,6 +190,7 @@ class PhotoEnhancerSketchApp:
 
         # Xây dựng các nhóm nút chức năng ở cột trái
         self._build_file_section()
+        self._build_stack_section()
         self._build_module1_section()
         self._build_module2_section()
         self._build_module3_section()
@@ -208,15 +233,6 @@ class PhotoEnhancerSketchApp:
         )
         btn_demo.pack(fill=tk.X, pady=2)
 
-        chk_chain = tk.Checkbutton(
-            frame,
-            text="Xử lý nối tiếp trên ảnh kết quả (Chaining)",
-            variable=self.chain_mode,
-            bg="#ffffff",
-            font=("Segoe UI", 9),
-        )
-        chk_chain.pack(anchor="w", pady=2)
-
         row_btn = tk.Frame(frame, bg="#ffffff")
         row_btn.pack(fill=tk.X, pady=2)
 
@@ -238,6 +254,76 @@ class PhotoEnhancerSketchApp:
             font=("Segoe UI", 9, "bold"),
         )
         btn_save.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(2, 0))
+
+    def _build_stack_section(self):
+        """Khung điều khiển chế độ đè nhiều hiệu ứng liên tiếp (Effect Stacking & History)."""
+        frame = tk.LabelFrame(
+            self.ctrl_frame,
+            text=" ⚙️ Chế độ Đè Hiệu Ứng (Stacking / Chaining) ",
+            font=("Segoe UI", 10, "bold"),
+            bg="#ffffff",
+            fg="#0369a1",
+            padx=8,
+            pady=6,
+        )
+        frame.pack(fill=tk.X, pady=(0, 8))
+
+        chk_chain = tk.Checkbutton(
+            frame,
+            text="Bật đè hiệu ứng liên tục (Chaining)",
+            variable=self.chain_mode,
+            command=self._on_chain_mode_toggle,
+            bg="#ffffff",
+            font=("Segoe UI", 9, "bold"),
+            activebackground="#ffffff",
+        )
+        chk_chain.pack(anchor="w")
+
+        self.lbl_chain_status = tk.Label(
+            frame,
+            text="🟢 Đang BẬT: Áp dụng tiếp lên kết quả vừa xử lý",
+            bg="#e0f2fe",
+            fg="#0369a1",
+            font=("Segoe UI", 8),
+            padx=6,
+            pady=3,
+            anchor="w",
+            justify=tk.LEFT,
+        )
+        self.lbl_chain_status.pack(fill=tk.X, pady=(2, 4))
+
+        self.lbl_chain_steps = tk.Label(
+            frame,
+            text="Chuỗi: [Gốc]",
+            bg="#f8fafc",
+            fg="#334155",
+            font=("Segoe UI", 8),
+            anchor="w",
+            justify=tk.LEFT,
+            wraplength=290,
+        )
+        self.lbl_chain_steps.pack(fill=tk.X, pady=(0, 4))
+
+        row_history = tk.Frame(frame, bg="#ffffff")
+        row_history.pack(fill=tk.X, pady=2)
+
+        btn_undo = tk.Button(
+            row_history,
+            text="↩️ Hoàn tác (Undo)",
+            command=self.action_undo,
+            bg="#f1f5f9",
+            font=("Segoe UI", 8, "bold"),
+        )
+        btn_undo.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 2))
+
+        btn_commit = tk.Button(
+            row_history,
+            text="📌 Chốt làm gốc mới",
+            command=self.action_commit_as_base,
+            bg="#f1f5f9",
+            font=("Segoe UI", 8),
+        )
+        btn_commit.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(2, 0))
 
     def _build_module1_section(self):
         """Giao diện Mô-đun 1: Nhiệm vụ của Thành viên 1."""
@@ -491,9 +577,119 @@ class PhotoEnhancerSketchApp:
             pady=3,
         ).pack(fill=tk.X, pady=2)
 
+        lbl_custom = tk.Label(
+            frame,
+            text="Bộ đè chuỗi hiệu ứng tùy chọn (Custom Stack):",
+            bg="#ffffff",
+            font=("Segoe UI", 8, "bold"),
+            fg="#9f1239",
+        )
+        lbl_custom.pack(anchor="w", pady=(8, 2))
+
+        self.pipe_opt_gamma = tk.BooleanVar(value=True)
+        self.pipe_opt_median = tk.BooleanVar(value=True)
+        self.pipe_opt_bilateral = tk.BooleanVar(value=False)
+        self.pipe_opt_sketch = tk.StringVar(value="pencil")
+
+        tk.Checkbutton(
+            frame,
+            text="1. Bù sáng Gamma (theo hệ số γ)",
+            variable=self.pipe_opt_gamma,
+            bg="#ffffff",
+            font=("Segoe UI", 8),
+        ).pack(anchor="w")
+
+        tk.Checkbutton(
+            frame,
+            text="2. Khử nhiễu Median (theo Kernel)",
+            variable=self.pipe_opt_median,
+            bg="#ffffff",
+            font=("Segoe UI", 8),
+        ).pack(anchor="w")
+
+        tk.Checkbutton(
+            frame,
+            text="3. Lọc Bilateral mịn da giữ nét",
+            variable=self.pipe_opt_bilateral,
+            bg="#ffffff",
+            font=("Segoe UI", 8),
+        ).pack(anchor="w")
+
+        frame_sketch_pick = tk.Frame(frame, bg="#ffffff")
+        frame_sketch_pick.pack(fill=tk.X, pady=2)
+        tk.Label(
+            frame_sketch_pick,
+            text="4. Hiệu ứng Sketch:",
+            bg="#ffffff",
+            font=("Segoe UI", 8),
+        ).pack(side=tk.LEFT)
+        ttk.Combobox(
+            frame_sketch_pick,
+            textvariable=self.pipe_opt_sketch,
+            values=["pencil", "sobel", "none"],
+            state="readonly",
+            width=8,
+        ).pack(side=tk.LEFT, padx=4)
+
+        tk.Button(
+            frame,
+            text="⚡ Chạy chuỗi đè tùy chọn",
+            command=self.action_run_custom_stack,
+            bg="#0f766e",
+            fg="white",
+            font=("Segoe UI", 9, "bold"),
+            pady=3,
+        ).pack(fill=tk.X, pady=(4, 2))
+
     # =========================================================================
     # CÁC HÀM HỖ TRỢ HIỂN THỊ & ĐỌC/GHI ẢNH
     # =========================================================================
+    def _on_chain_mode_toggle(self):
+        if self.chain_mode.get():
+            self.lbl_chain_status.config(
+                text="🟢 Đang BẬT: Áp dụng tiếp lên kết quả vừa xử lý",
+                bg="#e0f2fe",
+                fg="#0369a1",
+            )
+        else:
+            self.lbl_chain_status.config(
+                text="⚪ Đang TẮT: Áp dụng độc lập từ ảnh gốc",
+                bg="#f1f5f9",
+                fg="#64748b",
+            )
+
+    def _refresh_chain_label(self):
+        if hasattr(self, "lbl_chain_steps"):
+            display_steps = self.chain_steps[-4:] if len(self.chain_steps) > 4 else self.chain_steps
+            prefix = "... ➔ " if len(self.chain_steps) > 4 else ""
+            txt = prefix + " ➔ ".join(display_steps)
+            self.lbl_chain_steps.config(text=f"Chuỗi: {txt}")
+
+    def action_undo(self):
+        """Hoàn tác lại bước xử lý trước đó."""
+        if not self.history_stack:
+            messagebox.showinfo("Hoàn tác", "Chưa có bước xử lý trước đó để hoàn tác!")
+            return
+        prev_img, prev_op, prev_steps = self.history_stack.pop()
+        self.img_processed = prev_img
+        self.last_operation_name = prev_op
+        self.chain_steps = prev_steps
+        self._refresh_chain_label()
+        self.lbl_after_title.config(text=f"ẢNH SAU XỬ LÝ: {prev_op.upper()}")
+        self.refresh_image_panels()
+        self.status_var.set(f"Đã hoàn tác về bước: {prev_op}")
+
+    def action_commit_as_base(self):
+        """Chốt ảnh kết quả hiện tại làm ảnh gốc (Before)."""
+        if self.img_processed is None:
+            return
+        self.img_original = self.img_processed.copy()
+        self.history_stack.clear()
+        self.chain_steps = [f"Gốc mới ({self.last_operation_name})"]
+        self._refresh_chain_label()
+        self.refresh_image_panels()
+        self.status_var.set("Đã chốt ảnh hiện tại làm ảnh gốc mới.")
+
     def _get_source_image(self) -> np.ndarray:
         """
         Lấy ảnh đầu vào cho phép toán:
@@ -510,8 +706,24 @@ class PhotoEnhancerSketchApp:
         """Cập nhật ảnh đầu ra và hiển thị lên khung bên phải."""
         if result_img is None:
             return
+
+        # Lưu lịch sử trước khi gán kết quả mới để phục vụ Hoàn tác (Undo)
+        if self.img_processed is not None:
+            self.history_stack.append(
+                (self.img_processed.copy(), self.last_operation_name, list(self.chain_steps))
+            )
+            if len(self.history_stack) > 15:
+                self.history_stack.pop(0)
+
         self.img_processed = result_img
         self.last_operation_name = op_name
+
+        if self.chain_mode.get():
+            self.chain_steps.append(op_name)
+        else:
+            self.chain_steps = ["Gốc", op_name]
+
+        self._refresh_chain_label()
         self.lbl_after_title.config(text=f"ẢNH SAU XỬ LÝ: {op_name.upper()}")
         self.refresh_image_panels()
         h, w = result_img.shape[:2]
@@ -567,7 +779,14 @@ class PhotoEnhancerSketchApp:
             messagebox.showerror("Lỗi đọc ảnh", "Không thể đọc tệp hình ảnh đã chọn!")
             return
         self.img_original = img
-        self._update_result(img.copy(), "Ảnh gốc mới tải lên")
+        self.img_processed = img.copy()
+        self.history_stack.clear()
+        self.chain_steps = ["Gốc"]
+        self.last_operation_name = "Ảnh gốc mới tải lên"
+        self._refresh_chain_label()
+        self.lbl_after_title.config(text="ẢNH SAU XỬ LÝ: ẢNH GỐC")
+        self.refresh_image_panels()
+        self.status_var.set(f"Đã mở ảnh: {os.path.basename(file_path)}")
 
     def save_image(self):
         if self.img_processed is None:
@@ -587,7 +806,17 @@ class PhotoEnhancerSketchApp:
 
     def reset_image(self):
         if self.img_original is not None:
-            self._update_result(self.img_original.copy(), "Khôi phục ảnh gốc")
+            if self.img_processed is not None:
+                self.history_stack.append(
+                    (self.img_processed.copy(), self.last_operation_name, list(self.chain_steps))
+                )
+            self.img_processed = self.img_original.copy()
+            self.last_operation_name = "Khôi phục ảnh gốc"
+            self.chain_steps = ["Gốc"]
+            self._refresh_chain_label()
+            self.lbl_after_title.config(text="ẢNH SAU XỬ LÝ: ẢNH GỐC")
+            self.refresh_image_panels()
+            self.status_var.set("Đã khôi phục về ảnh gốc.")
 
     def load_demo_image(self):
         """Tạo một bức ảnh chân dung/phong cảnh giả lập thiếu sáng kèm nhiễu hạt để test ngay."""
@@ -618,7 +847,14 @@ class PhotoEnhancerSketchApp:
         img[noise_mask > 0.992] = [5, 5, 5]
 
         self.img_original = img
-        self._update_result(img.copy(), "Ảnh mẫu thiếu sáng (Demo)")
+        self.img_processed = img.copy()
+        self.history_stack.clear()
+        self.chain_steps = ["Gốc"]
+        self.last_operation_name = "Ảnh mẫu thiếu sáng (Demo)"
+        self._refresh_chain_label()
+        self.lbl_after_title.config(text="ẢNH SAU XỬ LÝ: ẢNH MẪU (DEMO)")
+        self.refresh_image_panels()
+        self.status_var.set("Đã tải ảnh mẫu demo.")
 
     # =========================================================================
     # XỬ LÝ SỰ KIỆN MÔ-ĐUN 1 (THÀNH VIÊN 1)
@@ -751,6 +987,53 @@ class PhotoEnhancerSketchApp:
             self._update_result(step3, "Pipeline: Tăng sáng + Khử nhiễu + Sketch Art")
         else:
             self._update_result(step2, "Pipeline: Tăng sáng + Khử nhiễu")
+
+    def action_run_custom_stack(self):
+        """Chạy chuỗi các hiệu ứng đã chọn đè tuần tự lên nhau."""
+        if self.img_original is None:
+            return
+
+        gamma = float(self.gamma_var.get()) if self.pipe_opt_gamma.get() else None
+        median_k = int(self.ksize_var.get()) if self.pipe_opt_median.get() else None
+        bilateral_d = int(self.ksize_var.get()) if self.pipe_opt_bilateral.get() else None
+        sketch_mode = self.pipe_opt_sketch.get()
+        if sketch_mode == "none":
+            sketch_mode = None
+        sketch_k = int(self.sketch_blur_var.get())
+
+        if HAS_MOD3 and hasattr(mod3, "pipeline_custom_stack"):
+            res = mod3.pipeline_custom_stack(
+                self.img_original,
+                gamma=gamma,
+                median_ksize=median_k,
+                bilateral_d=bilateral_d,
+                sketch_mode=sketch_mode,
+                sketch_ksize=sketch_k,
+            )
+        else:
+            res = self.img_original.copy()
+            if gamma is not None:
+                res = mod1.apply_gamma_transform(res, gamma=gamma)
+            if median_k is not None and HAS_MOD2 and mod2:
+                res = mod2.apply_median_filter(res, ksize=median_k)
+            if bilateral_d is not None and HAS_MOD2 and mod2:
+                res = mod2.apply_bilateral_filter(res, d=bilateral_d, sigma_color=75, sigma_space=75)
+            if sketch_mode == "pencil" and HAS_MOD3 and mod3:
+                res = mod3.apply_pencil_sketch(res, blur_ksize=sketch_k)
+            elif sketch_mode == "sobel" and HAS_MOD3 and mod3:
+                res = mod3.apply_sobel_sketch(res, ksize=3)
+
+        applied_names = []
+        if gamma is not None:
+            applied_names.append(f"Gamma({gamma:.2f})")
+        if median_k is not None:
+            applied_names.append(f"Median({median_k})")
+        if bilateral_d is not None:
+            applied_names.append(f"Bilateral({bilateral_d})")
+        if sketch_mode is not None:
+            applied_names.append(f"Sketch({sketch_mode})")
+        op_label = "Chuỗi đè: " + (" + ".join(applied_names) if applied_names else "Không đổi")
+        self._update_result(res, op_label)
 
 
 if __name__ == "__main__":

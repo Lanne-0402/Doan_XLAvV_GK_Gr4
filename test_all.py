@@ -58,13 +58,21 @@ def run_checks():
     assert mod3.apply_sobel_sketch(None) is None
     print(" -> Mô-đun 3 OK.")
 
-    print("[4/4] Kiểm tra Pipeline liên hoàn...")
+    print("[4/4] Kiểm tra Pipeline liên hoàn & Đè nhiều hiệu ứng...")
     pipeline_res = mod3.pipeline_enhance_denoise_sketch(
         dummy_bgr, gamma=0.5, median_ksize=3, sketch_ksize=21
     )
     assert pipeline_res is not None
     assert pipeline_res.ndim == 2
     assert mod3.pipeline_enhance_denoise_sketch(None) is None
+
+    # Test Custom Stack Pipeline
+    custom_res = mod3.pipeline_custom_stack(
+        dummy_bgr, gamma=0.5, median_ksize=3, bilateral_d=5, sketch_mode="pencil", sketch_ksize=21
+    )
+    assert custom_res is not None
+    assert custom_res.ndim == 2
+    assert mod3.pipeline_custom_stack(None) is None
     print(" -> Pipeline OK.")
 
     print("\n>>> TẤT CẢ TEST ĐÃ VƯỢT QUA KHÔNG CÓ LỖI (PASS 100%) <<<")
