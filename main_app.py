@@ -1,11 +1,9 @@
 """
-CHƯƠNG TRÌNH CHÍNH: PHOTO ENHANCER & SKETCH TOOL (NHÓM 4)
----------------------------------------------------------
-Phụ trách xây dựng giao diện & tích hợp: Thành viên 1
-Cấu trúc kết nối:
-- Mô-đun 1 (module_enhance.py) : Tăng sáng, Cân bằng Histogram, Log, Gamma, Vẽ Histogram
-- Mô-đun 2 (module_denoise.py) : Làm mịn & Khử nhiễu (Thành viên 2)
-- Mô-đun 3 (module_sketch.py)  : Tạo hiệu ứng Tranh vẽ phác thảo Sketch Art (Thành viên 3)
+main_app.py - Giao diện chính: Photo Enhancer & Sketch Tool
+Quy trình chuẩn 3 bước:
+- Bước 1 (Xử lý đầu vào): Tăng sáng Gamma/Histogram & Làm mịn da tẩy khuyết điểm (Bilateral + Median).
+- Bước 2 (Phong cách tranh vẽ): Tranh phác thảo chì (Color Dodge) hoặc Tranh nét viền truyện tranh (Sobel).
+- Bước 3 (Xuất sản phẩm): Quy trình 1-Chạm (All-in-One), Xem biểu đồ Histogram & Lưu tranh kết quả.
 """
 
 import os
@@ -15,31 +13,15 @@ import cv2
 import numpy as np
 from PIL import Image, ImageTk
 
-# 1. Import Mô-đun 1 (Nhiệm vụ của Thành viên 1)
 import module_enhance as mod1
-
-# 2. Import Mô-đun 2 (Nhiệm vụ của Thành viên 2 - Có kiểm tra an toàn khi ghép code)
-try:
-    import module_denoise as mod2
-    HAS_MOD2 = True
-except ImportError:
-    mod2 = None
-    HAS_MOD2 = False
-
-# 3. Import Mô-đun 3 (Nhiệm vụ của Thành viên 3 - Có kiểm tra an toàn khi ghép code)
-try:
-    import module_sketch as mod3
-    HAS_MOD3 = True
-except ImportError:
-    mod3 = None
-    HAS_MOD3 = False
+import module_denoise as mod2
+import module_sketch as mod3
 
 
 def read_image_unicode(file_path: str) -> np.ndarray:
     """Đọc ảnh hỗ trợ đường dẫn tiếng Việt có dấu trên Windows."""
     stream = np.fromfile(file_path, dtype=np.uint8)
-    img = cv2.imdecode(stream, cv2.IMREAD_COLOR)
-    return img
+    return cv2.imdecode(stream, cv2.IMREAD_COLOR)
 
 
 def save_image_unicode(file_path: str, img: np.ndarray) -> bool:
@@ -58,123 +40,103 @@ class PhotoEnhancerSketchApp:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("Photo Enhancer & Sketch Tool - Đồ án Giữa kỳ Xử lý ảnh & Video (Nhóm 4)")
-        self.root.geometry("1280x780")
-        self.root.minsize(1100, 680)
-        self.root.configure(bg="#f4f6f9")
+        self.root.geometry("1280x760")
+        self.root.minsize(1050, 650)
+        self.root.configure(bg="#f1f5f9")
 
-        # Biến lưu trữ ảnh gốc (Before) và ảnh sau xử lý (After)
+        # Quản lý trạng thái ảnh
         self.img_original: np.ndarray = None
         self.img_processed: np.ndarray = None
-        self.last_operation_name: str = "Ảnh sau xử lý"
-        # Bật mặc định chế độ đè hiệu ứng để không bị mất kết quả khi áp dụng hiệu ứng tiếp theo
-        self.chain_mode = tk.BooleanVar(value=True)
-        self.history_stack: list[tuple[np.ndarray, str, list[str]]] = []
-        self.chain_steps: list[str] = ["Gốc"]
+        self.last_op_name: str = "Ảnh gốc"
+        self.history_stack: list[tuple[np.ndarray, str]] = []
 
         self._build_ui()
-        # Khởi tạo sẵn một bức ảnh mẫu thiếu sáng để có thể bấm thử ngay lập tức
         self.load_demo_image()
 
     def _build_ui(self):
-        """Thiết kế bố cục giao diện chính: Cột điều khiển bên trái & Khung ảnh Trước-Sau bên phải."""
-        # Tiêu đề ứng dụng
-        header = tk.Frame(self.root, bg="#1e293b", height=50)
+        # 1. Header ứng dụng
+        header = tk.Frame(self.root, bg="#0f172a", height=48)
         header.pack(side=tk.TOP, fill=tk.X)
         lbl_title = tk.Label(
             header,
-            text="PHOTO ENHANCER & SKETCH TOOL (CÔNG CỤ XỬ LÝ & BIẾN ẢNH CHỤP THÀNH TRANH VẼ)",
-            font=("Segoe UI", 13, "bold"),
-            fg="white",
-            bg="#1e293b",
+            text="PHOTO ENHANCER & SKETCH TOOL (XỬ LÝ ẢNH & BIẾN ẢNH CHỤP THÀNH TRANH VẼ NÉT VIỀN)",
+            font=("Segoe UI", 12, "bold"),
+            fg="#f8fafc",
+            bg="#0f172a",
             pady=10,
         )
         lbl_title.pack()
 
-        # Vùng nội dung chính
-        main_frame = tk.Frame(self.root, bg="#f4f6f9")
-        main_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=8)
+        # 2. Vùng làm việc chính
+        work_area = tk.Frame(self.root, bg="#f1f5f9")
+        work_area.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=8)
 
-        # --- CỘT ĐIỀU KHIỂN BÊN TRÁI (Có thanh cuộn) ---
-        left_container = tk.Frame(main_frame, bg="#f4f6f9", width=340)
-        left_container.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
-        left_container.pack_propagate(False)
+        # Cột điều khiển bên trái (có thanh cuộn nếu màn hình nhỏ)
+        left_box = tk.Frame(work_area, bg="#f1f5f9", width=350)
+        left_box.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
+        left_box.pack_propagate(False)
 
-        self.canvas_ctrl = tk.Canvas(left_container, bg="#f4f6f9", highlightthickness=0)
-        scrollbar = ttk.Scrollbar(left_container, orient="vertical", command=self.canvas_ctrl.yview)
-        self.ctrl_frame = tk.Frame(self.canvas_ctrl, bg="#f4f6f9")
+        canvas_ctrl = tk.Canvas(left_box, bg="#f1f5f9", highlightthickness=0)
+        scrollbar = ttk.Scrollbar(left_box, orient="vertical", command=canvas_ctrl.yview)
+        self.ctrl_panel = tk.Frame(canvas_ctrl, bg="#f1f5f9")
 
-        self.ctrl_frame.bind(
+        self.ctrl_panel.bind(
             "<Configure>",
-            lambda e: self.canvas_ctrl.configure(scrollregion=self.canvas_ctrl.bbox("all")),
+            lambda e: canvas_ctrl.configure(scrollregion=canvas_ctrl.bbox("all")),
         )
-        self.canvas_win = self.canvas_ctrl.create_window((0, 0), window=self.ctrl_frame, anchor="nw", width=320)
-        self.canvas_ctrl.configure(yscrollcommand=scrollbar.set)
+        ctrl_win = canvas_ctrl.create_window((0, 0), window=self.ctrl_panel, anchor="nw", width=330)
+        canvas_ctrl.configure(yscrollcommand=scrollbar.set)
+        canvas_ctrl.bind("<Configure>", lambda e: canvas_ctrl.itemconfig(ctrl_win, width=e.width))
 
-        # Tự động co giãn frame điều khiển theo chiều ngang canvas
-        self.canvas_ctrl.bind(
-            "<Configure>",
-            lambda e: self.canvas_ctrl.itemconfig(self.canvas_win, width=e.width),
-        )
-
-        self.canvas_ctrl.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        canvas_ctrl.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        # Hỗ trợ lăn chuột mượt mà khi con trỏ ở trên panel bên trái
+        # Hỗ trợ cuộn chuột
         def _on_mousewheel(event):
-            x, y = self.root.winfo_pointerx(), self.root.winfo_pointery()
-            widget = self.root.winfo_containing(x, y)
-            w = widget
-            while w is not None:
-                if w in (left_container, self.canvas_ctrl, self.ctrl_frame):
-                    # Cuộn theo số nấc chuột
-                    delta = event.delta if hasattr(event, "delta") and event.delta else 120
-                    self.canvas_ctrl.yview_scroll(int(-1 * (delta / 60)), "units")
-                    break
-                w = getattr(w, "master", None)
+            delta = event.delta if hasattr(event, "delta") and event.delta else 120
+            canvas_ctrl.yview_scroll(int(-1 * (delta / 60)), "units")
 
-        self.root.bind_all("<MouseWheel>", _on_mousewheel)
+        canvas_ctrl.bind("<Enter>", lambda e: canvas_ctrl.bind_all("<MouseWheel>", _on_mousewheel))
+        canvas_ctrl.bind("<Leave>", lambda e: canvas_ctrl.unbind_all("<MouseWheel>"))
 
-        # --- KHUNG HIỂN THỊ ẢNH TRƯỚC - SAU BÊN PHẢI ---
-        right_frame = tk.Frame(main_frame, bg="#ffffff", bd=1, relief=tk.SOLID)
-        right_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        # Cột hiển thị ảnh Trước - Sau bên phải
+        right_box = tk.Frame(work_area, bg="#ffffff", bd=1, relief=tk.SOLID)
+        right_box.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        right_frame.columnconfigure(0, weight=1)
-        right_frame.columnconfigure(1, weight=1)
-        right_frame.rowconfigure(1, weight=1)
+        right_box.columnconfigure(0, weight=1)
+        right_box.columnconfigure(1, weight=1)
+        right_box.rowconfigure(1, weight=1)
 
-        # Tiêu đề khung Trước - Sau
-        lbl_before_title = tk.Label(
-            right_frame,
+        lbl_before = tk.Label(
+            right_box,
             text="ẢNH GỐC (BEFORE)",
-            font=("Segoe UI", 11, "bold"),
+            font=("Segoe UI", 10, "bold"),
             bg="#e2e8f0",
             fg="#0f172a",
-            pady=6,
+            pady=5,
         )
-        lbl_before_title.grid(row=0, column=0, sticky="ew", padx=(8, 4), pady=(8, 4))
+        lbl_before.grid(row=0, column=0, sticky="ew", padx=(6, 3), pady=(6, 3))
 
-        self.lbl_after_title = tk.Label(
-            right_frame,
+        self.lbl_after = tk.Label(
+            right_box,
             text="ẢNH SAU XỬ LÝ (AFTER)",
-            font=("Segoe UI", 11, "bold"),
+            font=("Segoe UI", 10, "bold"),
             bg="#dbeafe",
             fg="#1e3a8a",
-            pady=6,
+            pady=5,
         )
-        self.lbl_after_title.grid(row=0, column=1, sticky="ew", padx=(4, 8), pady=(8, 4))
+        self.lbl_after.grid(row=0, column=1, sticky="ew", padx=(3, 6), pady=(6, 3))
 
-        # Khung chứa ảnh Trước và Sau
-        self.panel_before = tk.Label(right_frame, bg="#f8fafc", bd=1, relief=tk.SUNKEN)
-        self.panel_before.grid(row=1, column=0, sticky="nsew", padx=(8, 4), pady=(0, 8))
+        self.panel_before = tk.Label(right_box, bg="#f8fafc", bd=1, relief=tk.SUNKEN)
+        self.panel_before.grid(row=1, column=0, sticky="nsew", padx=(6, 3), pady=(0, 6))
 
-        self.panel_after = tk.Label(right_frame, bg="#f8fafc", bd=1, relief=tk.SUNKEN)
-        self.panel_after.grid(row=1, column=1, sticky="nsew", padx=(4, 8), pady=(0, 8))
+        self.panel_after = tk.Label(right_box, bg="#f8fafc", bd=1, relief=tk.SUNKEN)
+        self.panel_after.grid(row=1, column=1, sticky="nsew", padx=(3, 6), pady=(0, 6))
 
-        # Tự động co giãn ảnh khi thay đổi kích thước cửa sổ
         self.panel_before.bind("<Configure>", lambda e: self.refresh_image_panels())
 
-        # Thanh trạng thái dưới đáy
-        self.status_var = tk.StringVar(value="Sẵn sàng. Hãy tải ảnh lên hoặc dùng ảnh mẫu để trải nghiệm.")
+        # Thanh trạng thái dưới cùng
+        self.status_var = tk.StringVar(value="Sẵn sàng. Hãy tải ảnh lên hoặc chọn ảnh mẫu.")
         status_bar = tk.Label(
             self.root,
             textvariable=self.status_var,
@@ -184,32 +146,31 @@ class PhotoEnhancerSketchApp:
             font=("Segoe UI", 9),
             bg="#e2e8f0",
             padx=10,
-            pady=4,
+            pady=3,
         )
         status_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
-        # Xây dựng các nhóm nút chức năng ở cột trái
-        self._build_file_section()
-        self._build_stack_section()
-        self._build_module1_section()
-        self._build_module2_section()
-        self._build_module3_section()
-        self._build_pipeline_section()
+        # Xây dựng các khối chức năng 3 bước
+        self._build_top_file_bar()
+        self._build_step1_enhance()
+        self._build_step2_sketch()
+        self._build_step3_output()
 
     # =========================================================================
-    # XÂY DỰNG CÁC BẢNG ĐIỀU KHIỂN CỘT TRÁI
+    # CÁC KHỐI CHỨC NĂNG THEO QUY TRÌNH 3 BƯỚC
     # =========================================================================
-    def _build_file_section(self):
+    def _build_top_file_bar(self):
+        """Khung công cụ đầu vào nhanh."""
         frame = tk.LabelFrame(
-            self.ctrl_frame,
-            text=" 0. Quản lý Ảnh Đầu Vào / Đầu Ra ",
-            font=("Segoe UI", 10, "bold"),
+            self.ctrl_panel,
+            text=" Tệp tin & Lịch sử ",
+            font=("Segoe UI", 9, "bold"),
             bg="#ffffff",
-            fg="#0f172a",
-            padx=8,
-            pady=6,
+            fg="#334155",
+            padx=6,
+            pady=4,
         )
-        frame.pack(fill=tk.X, pady=(0, 8))
+        frame.pack(fill=tk.X, pady=(0, 6))
 
         btn_open = tk.Button(
             frame,
@@ -218,180 +179,68 @@ class PhotoEnhancerSketchApp:
             bg="#2563eb",
             fg="white",
             font=("Segoe UI", 9, "bold"),
-            pady=4,
+            pady=3,
         )
         btn_open.pack(fill=tk.X, pady=2)
 
         btn_demo = tk.Button(
             frame,
-            text="🌙 Tạo ảnh mẫu thiếu sáng & nhiễu",
+            text="🌙 Tải ảnh mẫu ban đêm (Demo)",
             command=self.load_demo_image,
             bg="#475569",
             fg="white",
-            font=("Segoe UI", 9),
-            pady=3,
+            font=("Segoe UI", 8),
+            pady=2,
         )
         btn_demo.pack(fill=tk.X, pady=2)
 
-        row_btn = tk.Frame(frame, bg="#ffffff")
-        row_btn.pack(fill=tk.X, pady=2)
+        row = tk.Frame(frame, bg="#ffffff")
+        row.pack(fill=tk.X, pady=2)
 
-        btn_reset = tk.Button(
-            row_btn,
+        tk.Button(
+            row,
             text="🔄 Khôi phục gốc",
             command=self.reset_image,
-            bg="#e2e8f0",
-            font=("Segoe UI", 9),
-        )
-        btn_reset.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 2))
-
-        btn_save = tk.Button(
-            row_btn,
-            text="💾 Lưu ảnh kết quả",
-            command=self.save_image,
-            bg="#16a34a",
-            fg="white",
-            font=("Segoe UI", 9, "bold"),
-        )
-        btn_save.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(2, 0))
-
-    def _build_stack_section(self):
-        """Khung điều khiển chế độ đè nhiều hiệu ứng liên tiếp (Effect Stacking & History)."""
-        frame = tk.LabelFrame(
-            self.ctrl_frame,
-            text=" ⚙️ Chế độ Đè Hiệu Ứng (Stacking / Chaining) ",
-            font=("Segoe UI", 10, "bold"),
-            bg="#ffffff",
-            fg="#0369a1",
-            padx=8,
-            pady=6,
-        )
-        frame.pack(fill=tk.X, pady=(0, 8))
-
-        chk_chain = tk.Checkbutton(
-            frame,
-            text="Bật đè hiệu ứng liên tục (Chaining)",
-            variable=self.chain_mode,
-            command=self._on_chain_mode_toggle,
-            bg="#ffffff",
-            font=("Segoe UI", 9, "bold"),
-            activebackground="#ffffff",
-        )
-        chk_chain.pack(anchor="w")
-
-        self.lbl_chain_status = tk.Label(
-            frame,
-            text="🟢 Đang BẬT: Áp dụng tiếp lên kết quả vừa xử lý",
-            bg="#e0f2fe",
-            fg="#0369a1",
+            bg="#f1f5f9",
             font=("Segoe UI", 8),
-            padx=6,
-            pady=3,
-            anchor="w",
-            justify=tk.LEFT,
-        )
-        self.lbl_chain_status.pack(fill=tk.X, pady=(2, 4))
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 2))
 
-        self.lbl_chain_steps = tk.Label(
-            frame,
-            text="Chuỗi: [Gốc]",
-            bg="#f8fafc",
-            fg="#334155",
-            font=("Segoe UI", 8),
-            anchor="w",
-            justify=tk.LEFT,
-            wraplength=290,
-        )
-        self.lbl_chain_steps.pack(fill=tk.X, pady=(0, 4))
-
-        row_history = tk.Frame(frame, bg="#ffffff")
-        row_history.pack(fill=tk.X, pady=2)
-
-        btn_undo = tk.Button(
-            row_history,
+        tk.Button(
+            row,
             text="↩️ Hoàn tác (Undo)",
             command=self.action_undo,
             bg="#f1f5f9",
-            font=("Segoe UI", 8, "bold"),
-        )
-        btn_undo.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 2))
-
-        btn_commit = tk.Button(
-            row_history,
-            text="📌 Chốt làm gốc mới",
-            command=self.action_commit_as_base,
-            bg="#f1f5f9",
             font=("Segoe UI", 8),
-        )
-        btn_commit.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(2, 0))
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(2, 0))
 
-    def _build_module1_section(self):
-        """Giao diện Mô-đun 1: Nhiệm vụ của Thành viên 1."""
+    def _build_step1_enhance(self):
+        """BƯỚC 1: XỬ LÝ ĐẦU VÀO (Tăng sáng Gamma & Làm mịn da tẩy khuyết điểm)."""
         frame = tk.LabelFrame(
-            self.ctrl_frame,
-            text=" 1. Tăng Sáng & Tương Phản (Thành viên 1) ",
+            self.ctrl_panel,
+            text=" BƯỚC 1: XỬ LÝ ĐẦU VÀO ",
             font=("Segoe UI", 10, "bold"),
             bg="#ffffff",
             fg="#1d4ed8",
             padx=8,
             pady=6,
         )
-        frame.pack(fill=tk.X, pady=(0, 8))
+        frame.pack(fill=tk.X, pady=(0, 6))
 
-        tk.Button(
+        # 1. Bù sáng Gamma
+        lbl_g = tk.Label(
             frame,
-            text="Chuyển sang Ảnh Xám (Grayscale)",
-            command=self.action_grayscale,
-            bg="#f1f5f9",
-            font=("Segoe UI", 9),
-        ).pack(fill=tk.X, pady=2)
-
-        tk.Button(
-            frame,
-            text="Cân bằng Histogram (Ảnh xám - equalizeHist)",
-            command=lambda: self.action_hist_eq(keep_color=False),
-            bg="#f1f5f9",
-            font=("Segoe UI", 9),
-        ).pack(fill=tk.X, pady=2)
-
-        tk.Button(
-            frame,
-            text="Cân bằng Histogram (Giữ màu tự nhiên)",
-            command=lambda: self.action_hist_eq(keep_color=True),
-            bg="#f1f5f9",
-            font=("Segoe UI", 9),
-        ).pack(fill=tk.X, pady=2)
-
-        tk.Button(
-            frame,
-            text="Biến đổi Logarit (Bù sáng vùng tối)",
-            command=self.action_log_transform,
-            bg="#f1f5f9",
-            font=("Segoe UI", 9),
-        ).pack(fill=tk.X, pady=2)
-
-        tk.Button(
-            frame,
-            text="Kéo giãn tương phản (Contrast Stretching)",
-            command=self.action_contrast_stretch,
-            bg="#f1f5f9",
-            font=("Segoe UI", 9),
-        ).pack(fill=tk.X, pady=2)
-
-        # Thanh trượt điều chỉnh Gamma
-        lbl_gamma = tk.Label(
-            frame,
-            text="Hệ số Gamma (γ < 1: Tăng sáng | γ > 1: Giảm sáng):",
+            text="1. Tăng sáng Gamma (γ < 1: Sáng lên | γ > 1: Giảm lóa):",
             bg="#ffffff",
             font=("Segoe UI", 8, "bold"),
+            fg="#1e293b",
         )
-        lbl_gamma.pack(anchor="w", pady=(6, 0))
+        lbl_g.pack(anchor="w")
 
-        self.gamma_var = tk.DoubleVar(value=0.45)
+        self.gamma_var = tk.DoubleVar(value=0.50)
         scale_gamma = tk.Scale(
             frame,
-            from_=0.1,
-            to=3.0,
+            from_=0.10,
+            to=2.50,
             resolution=0.05,
             orient=tk.HORIZONTAL,
             variable=self.gamma_var,
@@ -400,369 +249,316 @@ class PhotoEnhancerSketchApp:
         )
         scale_gamma.pack(fill=tk.X)
 
+        row_light = tk.Frame(frame, bg="#ffffff")
+        row_light.pack(fill=tk.X, pady=2)
+
         tk.Button(
-            frame,
-            text="⚡ Áp dụng Biến đổi Gamma",
-            command=self.action_gamma_transform,
+            row_light,
+            text="⚡ Bù sáng Gamma",
+            command=self.action_apply_gamma,
             bg="#dbeafe",
             fg="#1e3a8a",
-            font=("Segoe UI", 9, "bold"),
-        ).pack(fill=tk.X, pady=2)
+            font=("Segoe UI", 8, "bold"),
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 2))
 
         tk.Button(
-            frame,
-            text="📊 Vẽ biểu đồ Histogram Trước - Sau",
-            command=self.action_show_histogram,
-            bg="#0284c7",
-            fg="white",
-            font=("Segoe UI", 9, "bold"),
-            pady=3,
-        ).pack(fill=tk.X, pady=(6, 2))
+            row_light,
+            text="Cân bằng sáng YCrCb",
+            command=self.action_apply_hist_eq_color,
+            bg="#f1f5f9",
+            font=("Segoe UI", 8),
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(2, 0))
 
-    def _build_module2_section(self):
-        """Giao diện Mô-đun 2: Điểm kết nối với Thành viên 2."""
-        frame = tk.LabelFrame(
-            self.ctrl_frame,
-            text=" 2. Làm Mịn & Khử Nhiễu (Thành viên 2) ",
-            font=("Segoe UI", 10, "bold"),
-            bg="#ffffff",
-            fg="#047857",
-            padx=8,
-            pady=6,
-        )
-        frame.pack(fill=tk.X, pady=(0, 8))
-
-        lbl_ksize = tk.Label(
+        # 2. Làm mịn da & Tẩy khuyết điểm
+        lbl_smooth = tk.Label(
             frame,
-            text="Kích thước mặt nạ lọc (Kernel size):",
+            text="2. Mức độ làm mịn da (Bilateral diameter):",
             bg="#ffffff",
             font=("Segoe UI", 8, "bold"),
+            fg="#047857",
         )
-        lbl_ksize.pack(anchor="w")
+        lbl_smooth.pack(anchor="w", pady=(6, 0))
 
-        self.ksize_var = tk.IntVar(value=5)
-        scale_k = tk.Scale(
+        self.smooth_d_var = tk.IntVar(value=9)
+        scale_smooth = tk.Scale(
             frame,
             from_=3,
-            to=15,
+            to=19,
             resolution=2,
             orient=tk.HORIZONTAL,
-            variable=self.ksize_var,
+            variable=self.smooth_d_var,
             bg="#ffffff",
             highlightthickness=0,
         )
-        scale_k.pack(fill=tk.X)
+        scale_smooth.pack(fill=tk.X)
 
         tk.Button(
             frame,
-            text="Bộ lọc Trung bình (Mean Filter)",
-            command=lambda: self.action_mod2("mean"),
-            bg="#f1f5f9",
-            font=("Segoe UI", 9),
-        ).pack(fill=tk.X, pady=2)
-
-        tk.Button(
-            frame,
-            text="Bộ lọc Gaussian (Gaussian Blur)",
-            command=lambda: self.action_mod2("gaussian"),
-            bg="#f1f5f9",
-            font=("Segoe UI", 9),
-        ).pack(fill=tk.X, pady=2)
-
-        tk.Button(
-            frame,
-            text="Bộ lọc Trung vị (Median - Khử nhiễu đốm)",
-            command=lambda: self.action_mod2("median"),
-            bg="#f1f5f9",
-            font=("Segoe UI", 9),
-        ).pack(fill=tk.X, pady=2)
-
-        tk.Button(
-            frame,
-            text="✨ Lọc Bilateral (Làm mịn da & Giữ nét biên)",
-            command=lambda: self.action_mod2("bilateral"),
+            text="✨ Làm mịn da & Khử khuyết điểm (Bilateral + Median)",
+            command=self.action_apply_skin_smooth,
             bg="#d1fae5",
             fg="#065f46",
-            font=("Segoe UI", 9, "bold"),
+            font=("Segoe UI", 8, "bold"),
+            pady=3,
         ).pack(fill=tk.X, pady=2)
 
-    def _build_module3_section(self):
-        """Giao diện Mô-đun 3: Điểm kết nối với Thành viên 3."""
+    def _build_step2_sketch(self):
+        """BƯỚC 2: CHỌN PHONG CÁCH TRANH VẼ (Color Dodge hoặc Sobel)."""
         frame = tk.LabelFrame(
-            self.ctrl_frame,
-            text=" 3. Phác Thảo Tranh Vẽ - Sketch (Thành viên 3) ",
+            self.ctrl_panel,
+            text=" BƯỚC 2: CHỌN PHONG CÁCH TRANH VẼ ",
             font=("Segoe UI", 10, "bold"),
             bg="#ffffff",
             fg="#7c3aed",
             padx=8,
             pady=6,
         )
-        frame.pack(fill=tk.X, pady=(0, 8))
+        frame.pack(fill=tk.X, pady=(0, 6))
 
-        lbl_sketch_k = tk.Label(
+        self.sketch_style_var = tk.StringVar(value="pencil")
+
+        rb1 = tk.Radiobutton(
             frame,
-            text="Độ đậm nét phác thảo chì (Gaussian Kernel):",
+            text="✏️ Tranh phác thảo chì (Color Dodge)",
+            variable=self.sketch_style_var,
+            value="pencil",
+            bg="#ffffff",
+            font=("Segoe UI", 9, "bold"),
+            command=self._on_style_change,
+        )
+        rb1.pack(anchor="w", pady=1)
+
+        rb2 = tk.Radiobutton(
+            frame,
+            text="🖋️ Tranh nét viền truyện tranh (Sobel Outline)",
+            variable=self.sketch_style_var,
+            value="sobel",
+            bg="#ffffff",
+            font=("Segoe UI", 9, "bold"),
+            command=self._on_style_change,
+        )
+        rb2.pack(anchor="w", pady=1)
+
+        self.lbl_sketch_param = tk.Label(
+            frame,
+            text="Độ đậm nhạt nét vẽ (Gaussian Blur):",
             bg="#ffffff",
             font=("Segoe UI", 8, "bold"),
         )
-        lbl_sketch_k.pack(anchor="w")
+        self.lbl_sketch_param.pack(anchor="w", pady=(4, 0))
 
-        self.sketch_blur_var = tk.IntVar(value=21)
-        scale_sketch = tk.Scale(
+        self.sketch_ksize_var = tk.IntVar(value=21)
+        self.scale_sketch = tk.Scale(
             frame,
             from_=5,
-            to=51,
+            to=45,
             resolution=2,
             orient=tk.HORIZONTAL,
-            variable=self.sketch_blur_var,
+            variable=self.sketch_ksize_var,
             bg="#ffffff",
             highlightthickness=0,
         )
-        scale_sketch.pack(fill=tk.X)
+        self.scale_sketch.pack(fill=tk.X)
 
         tk.Button(
             frame,
-            text="Lấy Ảnh Âm Bản (Negative Image)",
-            command=lambda: self.action_mod3("negative"),
-            bg="#f1f5f9",
-            font=("Segoe UI", 9),
-        ).pack(fill=tk.X, pady=2)
-
-        tk.Button(
-            frame,
-            text="✏️ Tranh vẽ chì (Pencil Sketch - Color Dodge)",
-            command=lambda: self.action_mod3("pencil"),
+            text="🎨 Biến thành Tranh vẽ",
+            command=self.action_apply_sketch,
             bg="#ede9fe",
             fg="#5b21b6",
             font=("Segoe UI", 9, "bold"),
-        ).pack(fill=tk.X, pady=2)
+            pady=3,
+        ).pack(fill=tk.X, pady=3)
 
-        tk.Button(
-            frame,
-            text="🖋️ Tranh nét viền (Sobel Edge Sketch)",
-            command=lambda: self.action_mod3("sobel"),
-            bg="#f1f5f9",
-            font=("Segoe UI", 9),
-        ).pack(fill=tk.X, pady=2)
-
-    def _build_pipeline_section(self):
-        """Kết hợp toàn diện cả 3 mô-đun của 3 thành viên."""
+    def _build_step3_output(self):
+        """BƯỚC 3: XUẤT SẢN PHẨM & BÁO CÁO."""
         frame = tk.LabelFrame(
-            self.ctrl_frame,
-            text=" 4. Quy trình Kết hợp Tự động (3 Mô-đun) ",
+            self.ctrl_panel,
+            text=" BƯỚC 3: XUẤT SẢN PHẨM & BÁO CÁO ",
             font=("Segoe UI", 10, "bold"),
             bg="#ffffff",
             fg="#be123c",
             padx=8,
             pady=6,
         )
-        frame.pack(fill=tk.X, pady=(0, 8))
+        frame.pack(fill=tk.X, pady=(0, 6))
 
+        # Nút 1-Chạm All-in-One
         tk.Button(
             frame,
-            text="🚀 Bù sáng Gamma + Làm mịn da Bilateral",
-            command=self.action_combo_enhance_smooth,
-            bg="#ffe4e6",
-            fg="#9f1239",
-            font=("Segoe UI", 9, "bold"),
-        ).pack(fill=tk.X, pady=2)
-
-        tk.Button(
-            frame,
-            text="🎨 Bù sáng + Khử nhiễu + Chuyển thành Sketch",
-            command=self.action_combo_full_sketch,
+            text="🚀 QUY TRÌNH 1-CHẠM (ALL-IN-ONE)\nẢnh chụp ➔ Tranh vẽ nét hoàn chỉnh",
+            command=self.action_one_click_all_in_one,
             bg="#be123c",
             fg="white",
             font=("Segoe UI", 9, "bold"),
-            pady=3,
-        ).pack(fill=tk.X, pady=2)
-
-        lbl_custom = tk.Label(
-            frame,
-            text="Bộ đè chuỗi hiệu ứng tùy chọn (Custom Stack):",
-            bg="#ffffff",
-            font=("Segoe UI", 8, "bold"),
-            fg="#9f1239",
-        )
-        lbl_custom.pack(anchor="w", pady=(8, 2))
-
-        self.pipe_opt_gamma = tk.BooleanVar(value=True)
-        self.pipe_opt_median = tk.BooleanVar(value=True)
-        self.pipe_opt_bilateral = tk.BooleanVar(value=False)
-        self.pipe_opt_sketch = tk.StringVar(value="pencil")
-
-        tk.Checkbutton(
-            frame,
-            text="1. Bù sáng Gamma (theo hệ số γ)",
-            variable=self.pipe_opt_gamma,
-            bg="#ffffff",
-            font=("Segoe UI", 8),
-        ).pack(anchor="w")
-
-        tk.Checkbutton(
-            frame,
-            text="2. Khử nhiễu Median (theo Kernel)",
-            variable=self.pipe_opt_median,
-            bg="#ffffff",
-            font=("Segoe UI", 8),
-        ).pack(anchor="w")
-
-        tk.Checkbutton(
-            frame,
-            text="3. Lọc Bilateral mịn da giữ nét",
-            variable=self.pipe_opt_bilateral,
-            bg="#ffffff",
-            font=("Segoe UI", 8),
-        ).pack(anchor="w")
-
-        frame_sketch_pick = tk.Frame(frame, bg="#ffffff")
-        frame_sketch_pick.pack(fill=tk.X, pady=2)
-        tk.Label(
-            frame_sketch_pick,
-            text="4. Hiệu ứng Sketch:",
-            bg="#ffffff",
-            font=("Segoe UI", 8),
-        ).pack(side=tk.LEFT)
-        ttk.Combobox(
-            frame_sketch_pick,
-            textvariable=self.pipe_opt_sketch,
-            values=["pencil", "sobel", "none"],
-            state="readonly",
-            width=8,
-        ).pack(side=tk.LEFT, padx=4)
+            pady=6,
+        ).pack(fill=tk.X, pady=3)
 
         tk.Button(
             frame,
-            text="⚡ Chạy chuỗi đè tùy chọn",
-            command=self.action_run_custom_stack,
-            bg="#0f766e",
+            text="📊 Xem biểu đồ Histogram Trước - Sau",
+            command=self.action_show_histogram,
+            bg="#0284c7",
+            fg="white",
+            font=("Segoe UI", 8, "bold"),
+            pady=3,
+        ).pack(fill=tk.X, pady=2)
+
+        tk.Button(
+            frame,
+            text="💾 Lưu tranh kết quả",
+            command=self.save_image,
+            bg="#16a34a",
             fg="white",
             font=("Segoe UI", 9, "bold"),
             pady=3,
-        ).pack(fill=tk.X, pady=(4, 2))
+        ).pack(fill=tk.X, pady=(2, 0))
 
     # =========================================================================
-    # CÁC HÀM HỖ TRỢ HIỂN THỊ & ĐỌC/GHI ẢNH
+    # HÀM XỬ LÝ SỰ KIỆN & CHUYỂN ĐỔI ẢNH
     # =========================================================================
-    def _on_chain_mode_toggle(self):
-        if self.chain_mode.get():
-            self.lbl_chain_status.config(
-                text="🟢 Đang BẬT: Áp dụng tiếp lên kết quả vừa xử lý",
-                bg="#e0f2fe",
-                fg="#0369a1",
-            )
+    def _on_style_change(self):
+        if self.sketch_style_var.get() == "pencil":
+            self.lbl_sketch_param.config(text="Độ đậm nét chì (Gaussian Blur ksize):")
+            self.scale_sketch.config(from_=5, to=45, resolution=2)
+            self.sketch_ksize_var.set(21)
         else:
-            self.lbl_chain_status.config(
-                text="⚪ Đang TẮT: Áp dụng độc lập từ ảnh gốc",
-                bg="#f1f5f9",
-                fg="#64748b",
-            )
-
-    def _refresh_chain_label(self):
-        if hasattr(self, "lbl_chain_steps"):
-            display_steps = self.chain_steps[-4:] if len(self.chain_steps) > 4 else self.chain_steps
-            prefix = "... ➔ " if len(self.chain_steps) > 4 else ""
-            txt = prefix + " ➔ ".join(display_steps)
-            self.lbl_chain_steps.config(text=f"Chuỗi: {txt}")
-
-    def action_undo(self):
-        """Hoàn tác lại bước xử lý trước đó."""
-        if not self.history_stack:
-            messagebox.showinfo("Hoàn tác", "Chưa có bước xử lý trước đó để hoàn tác!")
-            return
-        prev_img, prev_op, prev_steps = self.history_stack.pop()
-        self.img_processed = prev_img
-        self.last_operation_name = prev_op
-        self.chain_steps = prev_steps
-        self._refresh_chain_label()
-        self.lbl_after_title.config(text=f"ẢNH SAU XỬ LÝ: {prev_op.upper()}")
-        self.refresh_image_panels()
-        self.status_var.set(f"Đã hoàn tác về bước: {prev_op}")
-
-    def action_commit_as_base(self):
-        """Chốt ảnh kết quả hiện tại làm ảnh gốc (Before)."""
-        if self.img_processed is None:
-            return
-        self.img_original = self.img_processed.copy()
-        self.history_stack.clear()
-        self.chain_steps = [f"Gốc mới ({self.last_operation_name})"]
-        self._refresh_chain_label()
-        self.refresh_image_panels()
-        self.status_var.set("Đã chốt ảnh hiện tại làm ảnh gốc mới.")
-
-    def _get_source_image(self) -> np.ndarray:
-        """
-        Lấy ảnh đầu vào cho phép toán:
-        - Nếu bật chế độ 'Xử lý nối tiếp (Chaining)' thì lấy ảnh kết quả hiện tại làm đầu vào.
-        - Ngược lại luôn lấy từ ảnh gốc ban đầu.
-        """
-        if self.chain_mode.get() and self.img_processed is not None:
-            return self.img_processed.copy()
-        if self.img_original is not None:
-            return self.img_original.copy()
-        return None
+            self.lbl_sketch_param.config(text="Kích thước mặt nạ biên Sobel (1, 3, 5, 7):")
+            self.scale_sketch.config(from_=1, to=7, resolution=2)
+            self.sketch_ksize_var.set(3)
 
     def _update_result(self, result_img: np.ndarray, op_name: str):
-        """Cập nhật ảnh đầu ra và hiển thị lên khung bên phải."""
         if result_img is None:
             return
 
-        # Lưu lịch sử trước khi gán kết quả mới để phục vụ Hoàn tác (Undo)
         if self.img_processed is not None:
-            self.history_stack.append(
-                (self.img_processed.copy(), self.last_operation_name, list(self.chain_steps))
-            )
-            if len(self.history_stack) > 15:
+            self.history_stack.append((self.img_processed.copy(), self.last_op_name))
+            if len(self.history_stack) > 10:
                 self.history_stack.pop(0)
 
         self.img_processed = result_img
-        self.last_operation_name = op_name
-
-        if self.chain_mode.get():
-            self.chain_steps.append(op_name)
-        else:
-            self.chain_steps = ["Gốc", op_name]
-
-        self._refresh_chain_label()
-        self.lbl_after_title.config(text=f"ẢNH SAU XỬ LÝ: {op_name.upper()}")
+        self.last_op_name = op_name
+        self.lbl_after.config(text=f"ẢNH SAU XỬ LÝ: {op_name.upper()}")
         self.refresh_image_panels()
-        h, w = result_img.shape[:2]
-        channels = 1 if len(result_img.shape) == 2 else result_img.shape[2]
-        self.status_var.set(f"Đã thực hiện: {op_name} | Kích thước: {w}x{h} | Số kênh: {channels}")
 
+        h, w = result_img.shape[:2]
+        ch = 1 if len(result_img.shape) == 2 else result_img.shape[2]
+        self.status_var.set(f"Thực hiện: {op_name} | Kích thước: {w}x{h} | Kênh: {ch}")
+
+    def action_undo(self):
+        if not self.history_stack:
+            messagebox.showinfo("Hoàn tác", "Chưa có bước xử lý trước đó!")
+            return
+        prev_img, prev_op = self.history_stack.pop()
+        self.img_processed = prev_img
+        self.last_op_name = prev_op
+        self.lbl_after.config(text=f"ẢNH SAU XỬ LÝ: {prev_op.upper()}")
+        self.refresh_image_panels()
+        self.status_var.set(f"Đã hoàn tác về: {prev_op}")
+
+    # BƯỚC 1: XỬ LÝ ĐẦU VÀO
+    def action_apply_gamma(self):
+        src = self.img_processed if self.img_processed is not None else self.img_original
+        if src is None:
+            return
+        g = float(self.gamma_var.get())
+        res = mod1.apply_gamma_transform(src, gamma=g)
+        self._update_result(res, f"Tăng sáng Gamma (γ={g:.2f})")
+
+    def action_apply_hist_eq_color(self):
+        src = self.img_processed if self.img_processed is not None else self.img_original
+        if src is None:
+            return
+        res = mod1.apply_histogram_eq(src, keep_color=True)
+        self._update_result(res, "Cân bằng sáng YCrCb")
+
+    def action_apply_skin_smooth(self):
+        src = self.img_processed if self.img_processed is not None else self.img_original
+        if src is None:
+            return
+        d_val = int(self.smooth_d_var.get())
+        res = mod2.smooth_and_clean_skin(src, d=d_val)
+        self._update_result(res, f"Mịn da & Khử đốm (d={d_val})")
+
+    # BƯỚC 2: CHỌN PHONG CÁCH TRANH VẼ
+    def action_apply_sketch(self):
+        src = self.img_processed if self.img_processed is not None else self.img_original
+        if src is None:
+            return
+        style = self.sketch_style_var.get()
+        k = int(self.sketch_ksize_var.get())
+        if style == "pencil":
+            res = mod3.apply_pencil_sketch(src, blur_ksize=k)
+            self._update_result(res, f"Tranh phác thảo chì (k={k})")
+        else:
+            res = mod3.apply_sobel_sketch(src, ksize=k)
+            self._update_result(res, f"Tranh nét viền Sobel (k={k})")
+
+    # BƯỚC 3: QUY TRÌNH 1-CHẠM ALL-IN-ONE
+    def action_one_click_all_in_one(self):
+        if self.img_original is None:
+            return
+        g = float(self.gamma_var.get())
+        d_val = int(self.smooth_d_var.get())
+        style = self.sketch_style_var.get()
+        k = int(self.sketch_ksize_var.get())
+
+        # 1. Tăng sáng Gamma
+        bright = mod1.apply_gamma_transform(self.img_original, gamma=g)
+        # 2. Khử khuyết điểm da & Làm mịn giữ biên
+        smoothed = mod2.smooth_and_clean_skin(bright, d=d_val)
+        # 3. Chuyển thành tranh vẽ
+        if style == "pencil":
+            sketch = mod3.apply_pencil_sketch(smoothed, blur_ksize=k)
+            label = f"1-Chạm: Sáng(γ={g:.2f}) + Mịn da + Tranh chì"
+        else:
+            sketch = mod3.apply_sobel_sketch(smoothed, ksize=k)
+            label = f"1-Chạm: Sáng(γ={g:.2f}) + Mịn da + Nét viền Sobel"
+
+        self._update_result(sketch, label)
+
+    def action_show_histogram(self):
+        if self.img_original is None or self.img_processed is None:
+            messagebox.showwarning("Thông báo", "Cần có ảnh gốc và ảnh sau xử lý để vẽ Histogram!")
+            return
+        mod1.plot_histogram_comparison(
+            self.img_original, self.img_processed, title_after=self.last_op_name
+        )
+
+    # =========================================================================
+    # QUẢN LÝ ĐỌC/LƯU & HIỂN THỊ ẢNH
+    # =========================================================================
     def _cv2_to_imagetk(self, img: np.ndarray, max_w: int, max_h: int) -> ImageTk.PhotoImage:
-        """Chuyển đổi mảng ảnh OpenCV (BGR/Gray) sang ImageTk vừa khít khung hiển thị."""
         if len(img.shape) == 2:
             rgb = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
         else:
             rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
         h, w = rgb.shape[:2]
-        max_w = max(150, max_w - 16)
-        max_h = max(150, max_h - 16)
+        max_w = max(120, max_w - 12)
+        max_h = max(120, max_h - 12)
         scale = min(max_w / w, max_h / h)
-        new_w = max(1, int(w * scale))
-        new_h = max(1, int(h * scale))
+        nw = max(1, int(w * scale))
+        nh = max(1, int(h * scale))
 
-        pil_img = Image.fromarray(rgb).resize((new_w, new_h), Image.Resampling.LANCZOS)
+        pil_img = Image.fromarray(rgb).resize((nw, nh), Image.Resampling.LANCZOS)
         return ImageTk.PhotoImage(pil_img)
 
     def refresh_image_panels(self):
-        """Cập nhật lại 2 khung ảnh Trước và Sau."""
         w = self.panel_before.winfo_width()
         h = self.panel_before.winfo_height()
         if w <= 10 or h <= 10:
-            w, h = 420, 480
+            w, h = 400, 450
 
         if self.img_original is not None:
-            tk_before = self._cv2_to_imagetk(self.img_original, w, h)
-            self.panel_before.config(image=tk_before)
-            self.panel_before.image = tk_before
+            tk_b = self._cv2_to_imagetk(self.img_original, w, h)
+            self.panel_before.config(image=tk_b)
+            self.panel_before.image = tk_b
 
         if self.img_processed is not None:
-            tk_after = self._cv2_to_imagetk(self.img_processed, w, h)
-            self.panel_after.config(image=tk_after)
-            self.panel_after.image = tk_after
+            tk_a = self._cv2_to_imagetk(self.img_processed, w, h)
+            self.panel_after.config(image=tk_a)
+            self.panel_after.image = tk_a
 
     def open_image(self):
         file_path = filedialog.askopenfilename(
@@ -776,21 +572,19 @@ class PhotoEnhancerSketchApp:
             return
         img = read_image_unicode(file_path)
         if img is None:
-            messagebox.showerror("Lỗi đọc ảnh", "Không thể đọc tệp hình ảnh đã chọn!")
+            messagebox.showerror("Lỗi", "Không thể đọc tệp hình ảnh đã chọn!")
             return
         self.img_original = img
         self.img_processed = img.copy()
         self.history_stack.clear()
-        self.chain_steps = ["Gốc"]
-        self.last_operation_name = "Ảnh gốc mới tải lên"
-        self._refresh_chain_label()
-        self.lbl_after_title.config(text="ẢNH SAU XỬ LÝ: ẢNH GỐC")
+        self.last_op_name = "Ảnh gốc"
+        self.lbl_after.config(text="ẢNH SAU XỬ LÝ: ẢNH GỐC")
         self.refresh_image_panels()
-        self.status_var.set(f"Đã mở ảnh: {os.path.basename(file_path)}")
+        self.status_var.set(f"Đã mở: {os.path.basename(file_path)}")
 
     def save_image(self):
         if self.img_processed is None:
-            messagebox.showwarning("Chưa có ảnh", "Chưa có ảnh kết quả để lưu!")
+            messagebox.showwarning("Thông báo", "Chưa có ảnh kết quả để lưu!")
             return
         file_path = filedialog.asksaveasfilename(
             title="Lưu ảnh kết quả",
@@ -806,234 +600,42 @@ class PhotoEnhancerSketchApp:
 
     def reset_image(self):
         if self.img_original is not None:
-            if self.img_processed is not None:
-                self.history_stack.append(
-                    (self.img_processed.copy(), self.last_operation_name, list(self.chain_steps))
-                )
-            self.img_processed = self.img_original.copy()
-            self.last_operation_name = "Khôi phục ảnh gốc"
-            self.chain_steps = ["Gốc"]
-            self._refresh_chain_label()
-            self.lbl_after_title.config(text="ẢNH SAU XỬ LÝ: ẢNH GỐC")
-            self.refresh_image_panels()
-            self.status_var.set("Đã khôi phục về ảnh gốc.")
+            self._update_result(self.img_original.copy(), "Ảnh gốc")
 
     def load_demo_image(self):
-        """Tạo một bức ảnh chân dung/phong cảnh giả lập thiếu sáng kèm nhiễu hạt để test ngay."""
+        """Tạo ảnh chân dung đêm thiếu sáng và nhiễu hạt nhẹ để test ngay."""
         h, w = 420, 520
-        # Tạo nền đêm tối chuyển sắc (mức sáng thấp từ 12 đến 75)
-        y_grad = np.linspace(15, 70, h, dtype=np.float32)[:, None]
-        x_grad = np.linspace(10, 50, w, dtype=np.float32)[None, :]
-        bg_b = np.clip(y_grad + x_grad * 0.4, 0, 255).astype(np.uint8)
-        bg_g = np.clip(y_grad * 0.8 + x_grad * 0.3, 0, 255).astype(np.uint8)
-        bg_r = np.clip(y_grad * 0.7 + x_grad * 0.2, 0, 255).astype(np.uint8)
-        img = cv2.merge([bg_b, bg_g, bg_r])
+        y_grad = np.linspace(15, 65, h, dtype=np.float32)[:, None]
+        x_grad = np.linspace(10, 45, w, dtype=np.float32)[None, :]
+        b = np.clip(y_grad + x_grad * 0.4, 0, 255).astype(np.uint8)
+        g = np.clip(y_grad * 0.8 + x_grad * 0.3, 0, 255).astype(np.uint8)
+        r = np.clip(y_grad * 0.7 + x_grad * 0.2, 0, 255).astype(np.uint8)
+        img = cv2.merge([b, g, r])
 
-        # Vẽ mặt trăng và các tòa nhà/cây cối cùng nhân vật cách điệu trong bóng tối
-        cv2.circle(img, (410, 85), 42, (95, 115, 125), -1)
-        cv2.rectangle(img, (40, 210), (140, 420), (28, 34, 45), -1)
-        cv2.rectangle(img, (160, 170), (260, 420), (35, 42, 55), -1)
+        # Trăng & cảnh nền
+        cv2.circle(img, (420, 80), 40, (90, 110, 120), -1)
+        cv2.rectangle(img, (30, 200), (130, 420), (25, 32, 42), -1)
+        cv2.rectangle(img, (150, 160), (250, 420), (32, 40, 52), -1)
 
-        # Vẽ khuôn mặt chân dung cách điệu ở trung tâm
-        cv2.ellipse(img, (330, 260), (75, 95), 0, 0, 360, (62, 76, 98), -1)
-        cv2.circle(img, (302, 240), 10, (20, 22, 28), -1)
-        cv2.circle(img, (358, 240), 10, (20, 22, 28), -1)
-        cv2.ellipse(img, (330, 295), (28, 14), 0, 0, 180, (35, 38, 65), 3)
+        # Chân dung người
+        cv2.ellipse(img, (340, 255), (75, 95), 0, 0, 360, (62, 75, 95), -1)
+        cv2.circle(img, (312, 235), 9, (20, 22, 28), -1)
+        cv2.circle(img, (368, 235), 9, (20, 22, 28), -1)
+        cv2.ellipse(img, (340, 290), (28, 14), 0, 0, 180, (35, 38, 65), 3)
 
-        # Thêm một số hạt nhiễu muối tiêu nhẹ để test bộ lọc khử nhiễu
+        # Nhiễu hạt / mụn nhỏ giả lập
         rng = np.random.default_rng(42)
-        noise_mask = rng.random((h, w))
-        img[noise_mask < 0.008] = [180, 180, 180]
-        img[noise_mask > 0.992] = [5, 5, 5]
+        mask = rng.random((h, w))
+        img[mask < 0.008] = [170, 170, 170]
+        img[mask > 0.992] = [8, 8, 8]
 
         self.img_original = img
         self.img_processed = img.copy()
         self.history_stack.clear()
-        self.chain_steps = ["Gốc"]
-        self.last_operation_name = "Ảnh mẫu thiếu sáng (Demo)"
-        self._refresh_chain_label()
-        self.lbl_after_title.config(text="ẢNH SAU XỬ LÝ: ẢNH MẪU (DEMO)")
+        self.last_op_name = "Ảnh mẫu thiếu sáng (Demo)"
+        self.lbl_after.config(text="ẢNH SAU XỬ LÝ: ẢNH MẪU (DEMO)")
         self.refresh_image_panels()
-        self.status_var.set("Đã tải ảnh mẫu demo.")
-
-    # =========================================================================
-    # XỬ LÝ SỰ KIỆN MÔ-ĐUN 1 (THÀNH VIÊN 1)
-    # =========================================================================
-    def action_grayscale(self):
-        src = self._get_source_image()
-        res = mod1.to_grayscale(src)
-        self._update_result(res, "Ảnh mức xám (Grayscale)")
-
-    def action_hist_eq(self, keep_color: bool):
-        src = self._get_source_image()
-        res = mod1.apply_histogram_eq(src, keep_color=keep_color)
-        label = "Cân bằng Histogram (Giữ màu)" if keep_color else "Cân bằng Histogram (Ảnh xám)"
-        self._update_result(res, label)
-
-    def action_log_transform(self):
-        src = self._get_source_image()
-        res = mod1.apply_log_transform(src)
-        self._update_result(res, "Biến đổi Logarit")
-
-    def action_gamma_transform(self):
-        src = self._get_source_image()
-        gamma = float(self.gamma_var.get())
-        res = mod1.apply_gamma_transform(src, gamma=gamma)
-        self._update_result(res, f"Biến đổi Gamma (γ = {gamma:.2f})")
-
-    def action_contrast_stretch(self):
-        src = self._get_source_image()
-        res = mod1.apply_contrast_stretching(src)
-        self._update_result(res, "Kéo giãn tương phản tuyến tính")
-
-    def action_show_histogram(self):
-        if self.img_original is None or self.img_processed is None:
-            messagebox.showwarning("Thông báo", "Cần có ảnh gốc và ảnh sau xử lý để vẽ Histogram!")
-            return
-        mod1.plot_histogram_comparison(
-            self.img_original, self.img_processed, title_after=self.last_operation_name
-        )
-
-    # =========================================================================
-    # XỬ LÝ SỰ KIỆN MÔ-ĐUN 2 (KẾT NỐI CODE THÀNH VIÊN 2)
-    # =========================================================================
-    def action_mod2(self, filter_type: str):
-        if not HAS_MOD2 or mod2 is None:
-            messagebox.showinfo(
-                "Chờ ghép code Thành viên 2",
-                "Mô-đun 2 (module_denoise.py) chưa được kết nối!",
-            )
-            return
-
-        src = self._get_source_image()
-        ksize = int(self.ksize_var.get())
-
-        if filter_type == "mean":
-            res = mod2.apply_mean_filter(src, ksize=ksize)
-            self._update_result(res, f"Lọc Trung bình ({ksize}x{ksize})")
-        elif filter_type == "gaussian":
-            res = mod2.apply_gaussian_filter(src, ksize=ksize)
-            self._update_result(res, f"Lọc Gaussian ({ksize}x{ksize})")
-        elif filter_type == "median":
-            res = mod2.apply_median_filter(src, ksize=ksize)
-            self._update_result(res, f"Lọc Trung vị Median ({ksize}x{ksize})")
-        elif filter_type == "bilateral":
-            res = mod2.apply_bilateral_filter(src, d=ksize, sigma_color=75, sigma_space=75)
-            self._update_result(res, f"Lọc Bilateral Làm mịn giữ biên (d={ksize})")
-
-    # =========================================================================
-    # XỬ LÝ SỰ KIỆN MÔ-ĐUN 3 (KẾT NỐI CODE THÀNH VIÊN 3)
-    # =========================================================================
-    def action_mod3(self, sketch_type: str):
-        if not HAS_MOD3 or mod3 is None:
-            messagebox.showinfo(
-                "Chờ ghép code Thành viên 3",
-                "Mô-đun 3 (module_sketch.py) chưa được kết nối!",
-            )
-            return
-
-        src = self._get_source_image()
-        blur_k = int(self.sketch_blur_var.get())
-
-        if sketch_type == "negative":
-            res = mod3.apply_negative(src)
-            self._update_result(res, "Ảnh Âm Bản (Negative)")
-        elif sketch_type == "pencil":
-            res = mod3.apply_pencil_sketch(src, blur_ksize=blur_k)
-            self._update_result(res, f"Tranh Vẽ Chì - Color Dodge (k={blur_k})")
-        elif sketch_type == "sobel":
-            res = mod3.apply_sobel_sketch(src, ksize=3)
-            self._update_result(res, "Tranh Nét Viền - Sobel Sketch")
-
-    # =========================================================================
-    # QUY TRÌNH PHỐI HỢP CẢ 3 MÔ-ĐUN (PIPELINE)
-    # =========================================================================
-    def action_combo_enhance_smooth(self):
-        """Kết hợp Mô-đun 1 (Bù sáng Gamma) + Mô-đun 2 (Khử nhiễu & Làm mịn Bilateral)."""
-        if self.img_original is None:
-            return
-        gamma = float(self.gamma_var.get())
-        step1 = mod1.apply_gamma_transform(self.img_original, gamma=gamma)
-        if HAS_MOD2 and mod2 is not None:
-            step2 = mod2.apply_median_filter(step1, ksize=3)
-            step3 = mod2.apply_bilateral_filter(step2, d=9, sigma_color=75, sigma_space=75)
-            self._update_result(step3, f"Tăng sáng Gamma ({gamma}) + Làm mịn da")
-        else:
-            self._update_result(step1, f"Tăng sáng Gamma ({gamma})")
-
-    def action_combo_full_sketch(self):
-        """Kết hợp cả 3 Mô-đun: Bù sáng Gamma -> Khử nhiễu -> Chuyển thành Tranh vẽ chì."""
-        if self.img_original is None:
-            return
-        gamma = float(self.gamma_var.get())
-        blur_k = int(self.sketch_blur_var.get())
-
-        # Sử dụng hàm pipeline do Toàn (Thành viên 3) phụ trách
-        if HAS_MOD3 and hasattr(mod3, "pipeline_enhance_denoise_sketch"):
-            res = mod3.pipeline_enhance_denoise_sketch(
-                self.img_original, gamma=gamma, median_ksize=3, sketch_ksize=blur_k
-            )
-            self._update_result(res, "Pipeline: Tăng sáng + Khử nhiễu + Sketch Art")
-            return
-
-        step1 = mod1.apply_gamma_transform(self.img_original, gamma=gamma)
-        if HAS_MOD2 and mod2 is not None:
-            step2 = mod2.apply_median_filter(step1, ksize=3)
-        else:
-            step2 = step1
-
-        if HAS_MOD3 and mod3 is not None:
-            step3 = mod3.apply_pencil_sketch(step2, blur_ksize=blur_k)
-            self._update_result(step3, "Pipeline: Tăng sáng + Khử nhiễu + Sketch Art")
-        else:
-            self._update_result(step2, "Pipeline: Tăng sáng + Khử nhiễu")
-
-    def action_run_custom_stack(self):
-        """Chạy chuỗi các hiệu ứng đã chọn đè tuần tự lên nhau."""
-        if self.img_original is None:
-            return
-
-        gamma = float(self.gamma_var.get()) if self.pipe_opt_gamma.get() else None
-        median_k = int(self.ksize_var.get()) if self.pipe_opt_median.get() else None
-        bilateral_d = int(self.ksize_var.get()) if self.pipe_opt_bilateral.get() else None
-        sketch_mode = self.pipe_opt_sketch.get()
-        if sketch_mode == "none":
-            sketch_mode = None
-        sketch_k = int(self.sketch_blur_var.get())
-
-        if HAS_MOD3 and hasattr(mod3, "pipeline_custom_stack"):
-            res = mod3.pipeline_custom_stack(
-                self.img_original,
-                gamma=gamma,
-                median_ksize=median_k,
-                bilateral_d=bilateral_d,
-                sketch_mode=sketch_mode,
-                sketch_ksize=sketch_k,
-            )
-        else:
-            res = self.img_original.copy()
-            if gamma is not None:
-                res = mod1.apply_gamma_transform(res, gamma=gamma)
-            if median_k is not None and HAS_MOD2 and mod2:
-                res = mod2.apply_median_filter(res, ksize=median_k)
-            if bilateral_d is not None and HAS_MOD2 and mod2:
-                res = mod2.apply_bilateral_filter(res, d=bilateral_d, sigma_color=75, sigma_space=75)
-            if sketch_mode == "pencil" and HAS_MOD3 and mod3:
-                res = mod3.apply_pencil_sketch(res, blur_ksize=sketch_k)
-            elif sketch_mode == "sobel" and HAS_MOD3 and mod3:
-                res = mod3.apply_sobel_sketch(res, ksize=3)
-
-        applied_names = []
-        if gamma is not None:
-            applied_names.append(f"Gamma({gamma:.2f})")
-        if median_k is not None:
-            applied_names.append(f"Median({median_k})")
-        if bilateral_d is not None:
-            applied_names.append(f"Bilateral({bilateral_d})")
-        if sketch_mode is not None:
-            applied_names.append(f"Sketch({sketch_mode})")
-        op_label = "Chuỗi đè: " + (" + ".join(applied_names) if applied_names else "Không đổi")
-        self._update_result(res, op_label)
+        self.status_var.set("Đã tải ảnh mẫu ban đêm (Demo).")
 
 
 if __name__ == "__main__":

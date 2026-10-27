@@ -1,6 +1,6 @@
 """
-Kiểm thử tự động toàn bộ chương trình (Nhiệm vụ của Toàn - Thành viên 3).
-Chạy: py -3.10 test_all.py
+test_all.py - Kiểm thử tự động toàn bộ chức năng các mô-đun và pipeline
+Chạy: python test_all.py
 """
 
 import sys
@@ -10,13 +10,11 @@ import module_enhance as mod1
 import module_denoise as mod2
 import module_sketch as mod3
 
-# Tranh loi encode console tren Windows
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8")
 
 
 def run_checks():
-    # Tạo dữ liệu test
     dummy_bgr = np.random.randint(0, 256, (100, 120, 3), dtype=np.uint8)
     dummy_gray = np.random.randint(0, 256, (100, 120), dtype=np.uint8)
 
@@ -32,7 +30,7 @@ def run_checks():
     print(" -> Mô-đun 1 OK.")
 
     print("[2/4] Kiểm tra Mô-đun 2 (Làm mịn & Khử nhiễu)...")
-    for k in [3, 4, 5]:  # Test cả ksize chẵn và lẻ
+    for k in [3, 4, 5]:
         assert mod2.apply_mean_filter(dummy_bgr, ksize=k).shape == dummy_bgr.shape
         assert mod2.apply_gaussian_filter(dummy_bgr, ksize=k).shape == dummy_bgr.shape
         assert mod2.apply_median_filter(dummy_bgr, ksize=k).shape == dummy_bgr.shape
@@ -40,18 +38,17 @@ def run_checks():
     assert mod2.apply_mean_filter(None) is None
     print(" -> Mô-đun 2 OK.")
 
-    print("[3/4] Kiểm tra Mô-đun 3 (Hiệu ứng Sketch Art của Toàn)...")
-    # Test âm bản
+    print("[3/4] Kiểm tra Mô-đun 3 (Hiệu ứng Sketch Art)...")
     assert mod3.apply_negative(dummy_bgr).shape == dummy_bgr.shape
     assert mod3.apply_negative(dummy_gray).shape == dummy_gray.shape
-    # Test tranh chì Color Dodge
+
     res_pencil_bgr = mod3.apply_pencil_sketch(dummy_bgr, blur_ksize=21)
-    res_pencil_gray = mod3.apply_pencil_sketch(dummy_gray, blur_ksize=20)  # chẵn test auto-fix
+    res_pencil_gray = mod3.apply_pencil_sketch(dummy_gray, blur_ksize=20)
     assert res_pencil_bgr.ndim == 2, "Tranh chì phải là ảnh 1 kênh"
     assert res_pencil_gray.ndim == 2
-    # Test tranh nét viền Sobel
+
     res_sobel_bgr = mod3.apply_sobel_sketch(dummy_bgr, ksize=3)
-    res_sobel_even = mod3.apply_sobel_sketch(dummy_bgr, ksize=4)  # chẵn test auto-fix
+    res_sobel_even = mod3.apply_sobel_sketch(dummy_bgr, ksize=4)
     assert res_sobel_bgr.ndim == 2
     assert res_sobel_even.ndim == 2
     assert mod3.apply_pencil_sketch(None) is None
@@ -66,7 +63,6 @@ def run_checks():
     assert pipeline_res.ndim == 2
     assert mod3.pipeline_enhance_denoise_sketch(None) is None
 
-    # Test Custom Stack Pipeline
     custom_res = mod3.pipeline_custom_stack(
         dummy_bgr, gamma=0.5, median_ksize=3, bilateral_d=5, sketch_mode="pencil", sketch_ksize=21
     )

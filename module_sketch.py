@@ -1,9 +1,6 @@
 """
-MÔ-ĐUN 3: TẠO HIỆU ỨNG PHÁC THẢO TRANH VẼ - SKETCH ART (DÀNH CHO THÀNH VIÊN 3)
-------------------------------------------------------------------------------
-File này định nghĩa sẵn các hàm chuẩn để tự động kết nối vào giao diện chính (main_app.py).
-Khi Thành viên 3 hoàn thành code (từ anh_am_ban.py, anh_bo_loc.py, sobel.py),
-chỉ cần đặt nội dung xử lý vào đúng các hàm bên dưới.
+module_sketch.py - Hiệu ứng phác thảo tranh vẽ (Sketch Art) & Pipeline kết hợp
+Hỗ trợ: Tranh vẽ chì (Color Dodge), Tranh nét viền (Sobel), Luồng kết hợp tự động (Pipeline).
 """
 
 import cv2
@@ -11,10 +8,7 @@ import numpy as np
 
 
 def apply_negative(img: np.ndarray) -> np.ndarray:
-    """
-    [THÀNH VIÊN 3] Tạo ảnh âm bản (Negative Image) từ anh_am_ban.py.
-    Công thức: s = 255 - r
-    """
+    """Tạo ảnh âm bản: s = 255 - r (bước đệm kỹ thuật cho thuật toán Color Dodge)."""
     if img is None:
         return None
     return 255 - img
@@ -22,42 +16,32 @@ def apply_negative(img: np.ndarray) -> np.ndarray:
 
 def apply_pencil_sketch(img: np.ndarray, blur_ksize: int = 21) -> np.ndarray:
     """
-    [THÀNH VIÊN 3] Chuyển ảnh thành tranh vẽ chì (Pencil Sketch) bằng phép hòa trộn Color Dodge:
-    Bước 1: Chuyển sang ảnh xám (gray).
-    Bước 2: Lấy ảnh âm bản (255 - gray).
-    Bước 3: Làm mờ ảnh âm bản bằng bộ lọc Gaussian với kích thước mặt nạ lớn.
-    Bước 4: Hòa trộn Color Dodge giữa ảnh xám và ảnh âm bản đã làm mờ.
+    Tạo tranh phác thảo chì mỹ thuật bằng phép hòa trộn Color Dodge:
+    1. Chuyển ảnh xám -> 2. Lấy âm bản -> 3. Làm mờ Gaussian -> 4. Hòa trộn Color Dodge.
     """
     if img is None:
         return None
 
-    # Bước 1: Chuyển ảnh xám
     if len(img.shape) == 3:
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     else:
         gray = img.copy()
 
-    # Bước 2: Ảnh âm bản
     inv_gray = 255 - gray
 
-    # Bước 3: Làm mờ Gaussian trên ảnh âm bản (đảm bảo ksize là số lẻ)
     k = max(3, int(blur_ksize))
     if k % 2 == 0:
         k += 1
     blurred_inv = cv2.GaussianBlur(inv_gray, (k, k), 0)
 
-    # Bước 4: Hòa trộn lớp (Color Dodge) trích xuất nét chì
     sketch = cv2.divide(gray, 255 - blurred_inv, scale=256.0)
     return sketch
 
 
 def apply_sobel_sketch(img: np.ndarray, ksize: int = 3) -> np.ndarray:
     """
-    [THÀNH VIÊN 3] Tạo tranh vẽ nét viền bằng toán tử đạo hàm Sobel (sobel.py):
-    Bước 1: Chuyển sang ảnh xám và làm mịn nhẹ bằng Gaussian để khử nhiễu.
-    Bước 2: Tính đạo hàm Sobel theo hướng X (Gx) và hướng Y (Gy).
-    Bước 3: Tính biên độ Gradient G = sqrt(Gx^2 + Gy^2).
-    Bước 4: Đảo ngược màu (255 - G) để có nét vẽ màu đen trên nền giấy trắng.
+    Tạo tranh vẽ nét viền truyện tranh bằng toán tử đạo hàm Sobel:
+    Tính Gradient G = sqrt(Gx^2 + Gy^2), đảo ngược thành nét đen trên nền trắng.
     """
     if img is None:
         return None
@@ -67,25 +51,18 @@ def apply_sobel_sketch(img: np.ndarray, ksize: int = 3) -> np.ndarray:
     else:
         gray = img.copy()
 
-    # Đảm bảo ksize hợp lệ cho cv2.Sobel (1, 3, 5, 7)
     k = max(1, min(7, int(ksize)))
     if k % 2 == 0:
         k += 1
 
-    # Làm mịn nhẹ để tránh nhiễu tạo nét giả
     blurred = cv2.GaussianBlur(gray, (3, 3), 0)
-
-    # Tính đạo hàm Sobel theo phương X và Y
     sobel_x = cv2.Sobel(blurred, cv2.CV_64F, 1, 0, ksize=k)
     sobel_y = cv2.Sobel(blurred, cv2.CV_64F, 0, 1, ksize=k)
 
-    # Độ lớn biên
     magnitude = cv2.magnitude(sobel_x, sobel_y)
     edges = cv2.convertScaleAbs(magnitude)
 
-    # Đảo màu: Nền trắng (255) - Nét viền đen (0)
-    sobel_sketch = 255 - edges
-    return sobel_sketch
+    return 255 - edges
 
 
 def pipeline_enhance_denoise_sketch(
@@ -93,15 +70,15 @@ def pipeline_enhance_denoise_sketch(
     gamma: float = 0.5,
     median_ksize: int = 3,
     sketch_ksize: int = 21,
+    sketch_style: str = "pencil",
 ) -> np.ndarray:
     """
-    [THÀNH VIÊN 3 - TOÀN] Luồng kết hợp liên hoàn (Pipeline):
-    Ảnh thiếu sáng -> Bù sáng Gamma -> Khử nhiễu Median -> Tạo Sketch Art (Color Dodge).
+    Quy trình 1-Chạm tự động:
+    1. Tăng sáng Gamma -> 2. Khử khuyết điểm da (Median) -> 3. Chuyển thành Tranh vẽ đã chọn.
     """
     if img is None:
         return None
 
-    # Bước 1: Tăng sáng bằng Gamma (Mô-đun 1)
     try:
         import module_enhance as mod1
         bright = mod1.apply_gamma_transform(img, gamma=gamma)
@@ -109,19 +86,19 @@ def pipeline_enhance_denoise_sketch(
         img_f = img.astype(np.float32) / 255.0
         bright = np.clip(np.power(img_f, max(0.1, gamma)) * 255.0, 0, 255).astype(np.uint8)
 
-    # Bước 2: Khử nhiễu đốm bằng Median (Mô-đun 2)
     try:
         import module_denoise as mod2
-        denoised = mod2.apply_median_filter(bright, ksize=median_ksize)
+        cleaned = mod2.apply_median_filter(bright, ksize=median_ksize)
+        smoothed = mod2.apply_bilateral_filter(cleaned, d=9, sigma_color=75.0, sigma_space=75.0)
     except Exception:
         k = max(3, int(median_ksize))
         if k % 2 == 0:
             k += 1
-        denoised = cv2.medianBlur(bright, k)
+        smoothed = cv2.medianBlur(bright, k)
 
-    # Bước 3: Tạo tranh phác thảo chì bằng Color Dodge (Mô-đun 3)
-    sketch = apply_pencil_sketch(denoised, blur_ksize=sketch_ksize)
-    return sketch
+    if sketch_style == "sobel":
+        return apply_sobel_sketch(smoothed, ksize=3)
+    return apply_pencil_sketch(smoothed, blur_ksize=sketch_ksize)
 
 
 def pipeline_custom_stack(
@@ -132,20 +109,12 @@ def pipeline_custom_stack(
     sketch_mode: str | None = None,
     sketch_ksize: int = 21,
 ) -> np.ndarray:
-    """
-    [THÀNH VIÊN 3 - TOÀN] Bộ phối hợp đè nhiều hiệu ứng tùy chọn (Custom Stack Pipeline):
-    Cho phép đè tuần tự các bước:
-    - Bù sáng Gamma
-    - Khử nhiễu Median
-    - Làm mịn da Bilateral
-    - Phác thảo tranh vẽ ('pencil' hoặc 'sobel')
-    """
+    """Thực thi chuỗi xử lý tùy chọn: Gamma -> Median -> Bilateral -> Sketch."""
     if img is None:
         return None
 
     curr = img.copy()
 
-    # 1. Bù sáng Gamma
     if gamma is not None:
         try:
             import module_enhance as mod1
@@ -154,7 +123,6 @@ def pipeline_custom_stack(
             img_f = curr.astype(np.float32) / 255.0
             curr = np.clip(np.power(img_f, max(0.1, gamma)) * 255.0, 0, 255).astype(np.uint8)
 
-    # 2. Khử nhiễu Median
     if median_ksize is not None:
         try:
             import module_denoise as mod2
@@ -165,7 +133,6 @@ def pipeline_custom_stack(
                 k += 1
             curr = cv2.medianBlur(curr, k)
 
-    # 3. Làm mịn Bilateral
     if bilateral_d is not None:
         try:
             import module_denoise as mod2
@@ -173,7 +140,6 @@ def pipeline_custom_stack(
         except Exception:
             curr = cv2.bilateralFilter(curr, d=int(bilateral_d), sigmaColor=75, sigmaSpace=75)
 
-    # 4. Tạo tranh vẽ Sketch
     if sketch_mode == "pencil":
         curr = apply_pencil_sketch(curr, blur_ksize=sketch_ksize)
     elif sketch_mode == "sobel":
