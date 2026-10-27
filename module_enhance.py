@@ -5,6 +5,8 @@ Hỗ trợ: Cân bằng Histogram, biến đổi Gamma, biến đổi Logarit, k
 
 import cv2
 import numpy as np
+import matplotlib
+matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 
 

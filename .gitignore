@@ -4,6 +4,11 @@ __pycache__/
 *$py.class
 *.so
 
+# PyInstaller build files & specifications
+build/
+dist/
+*.spec
+
 # Virtual environments
 venv/
 .venv/
@@ -18,7 +23,7 @@ ENV/
 secrets.json
 local_settings.py
 
-# IDE & Editor settings (chứa đường dẫn cá nhân trên máy)
+# IDE & Editor settings
 .vscode/
 .idea/
 *.swp
@@ -35,7 +40,5 @@ $RECYCLE.BIN/
 .DS_Store
 
 # Build / packaging / logs
-build/
-dist/
 *.egg-info/
 *.log
