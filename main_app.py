@@ -174,7 +174,7 @@ class PhotoEnhancerSketchApp:
 
         btn_open = tk.Button(
             frame,
-            text="📂 Chọn ảnh từ máy tính...",
+            text="Chọn ảnh từ máy tính...",
             command=self.open_image,
             bg="#2563eb",
             fg="white",
@@ -185,7 +185,7 @@ class PhotoEnhancerSketchApp:
 
         btn_demo = tk.Button(
             frame,
-            text="🌙 Tải ảnh mẫu ban đêm (Demo)",
+            text="Tải ảnh mẫu ban đêm (Demo)",
             command=self.load_demo_image,
             bg="#475569",
             fg="white",
@@ -199,7 +199,7 @@ class PhotoEnhancerSketchApp:
 
         tk.Button(
             row,
-            text="🔄 Khôi phục gốc",
+            text="Khôi phục gốc",
             command=self.reset_image,
             bg="#f1f5f9",
             font=("Segoe UI", 8),
@@ -207,7 +207,7 @@ class PhotoEnhancerSketchApp:
 
         tk.Button(
             row,
-            text="↩️ Hoàn tác (Undo)",
+            text="Hoàn tác (Undo)",
             command=self.action_undo,
             bg="#f1f5f9",
             font=("Segoe UI", 8),
@@ -217,7 +217,7 @@ class PhotoEnhancerSketchApp:
         """BƯỚC 1: XỬ LÝ ĐẦU VÀO (Tăng sáng Gamma & Làm mịn da tẩy khuyết điểm)."""
         frame = tk.LabelFrame(
             self.ctrl_panel,
-            text=" BƯỚC 1: XỬ LÝ ĐẦU VÀO ",
+            text=" XỬ LÝ ĐẦU VÀO ",
             font=("Segoe UI", 10, "bold"),
             bg="#ffffff",
             fg="#1d4ed8",
@@ -254,7 +254,7 @@ class PhotoEnhancerSketchApp:
 
         tk.Button(
             row_light,
-            text="⚡ Bù sáng Gamma",
+            text=" Bù sáng Gamma",
             command=self.action_apply_gamma,
             bg="#dbeafe",
             fg="#1e3a8a",
@@ -294,7 +294,7 @@ class PhotoEnhancerSketchApp:
 
         tk.Button(
             frame,
-            text="✨ Làm mịn da & Khử khuyết điểm (Bilateral + Median)",
+            text="Làm mịn da & Khử khuyết điểm (Bilateral + Median)",
             command=self.action_apply_skin_smooth,
             bg="#d1fae5",
             fg="#065f46",
@@ -306,7 +306,7 @@ class PhotoEnhancerSketchApp:
         """BƯỚC 2: CHỌN PHONG CÁCH TRANH VẼ (Color Dodge hoặc Sobel)."""
         frame = tk.LabelFrame(
             self.ctrl_panel,
-            text=" BƯỚC 2: CHỌN PHONG CÁCH TRANH VẼ ",
+            text=" CHỌN PHONG CÁCH TRANH VẼ ",
             font=("Segoe UI", 10, "bold"),
             bg="#ffffff",
             fg="#7c3aed",
@@ -319,7 +319,7 @@ class PhotoEnhancerSketchApp:
 
         rb1 = tk.Radiobutton(
             frame,
-            text="✏️ Tranh phác thảo chì (Color Dodge)",
+            text=" Tranh phác thảo chì (Color Dodge)",
             variable=self.sketch_style_var,
             value="pencil",
             bg="#ffffff",
@@ -330,7 +330,7 @@ class PhotoEnhancerSketchApp:
 
         rb2 = tk.Radiobutton(
             frame,
-            text="🖋️ Tranh nét viền truyện tranh (Sobel Outline)",
+            text="Tranh nét viền truyện tranh (Sobel)",
             variable=self.sketch_style_var,
             value="sobel",
             bg="#ffffff",
@@ -341,7 +341,7 @@ class PhotoEnhancerSketchApp:
 
         self.lbl_sketch_param = tk.Label(
             frame,
-            text="Độ đậm nhạt nét vẽ (Gaussian Blur):",
+            text="Độ đậm nhạt nét vẽ:",
             bg="#ffffff",
             font=("Segoe UI", 8, "bold"),
         )
@@ -362,7 +362,7 @@ class PhotoEnhancerSketchApp:
 
         tk.Button(
             frame,
-            text="🎨 Biến thành Tranh vẽ",
+            text="Biến thành Tranh vẽ",
             command=self.action_apply_sketch,
             bg="#ede9fe",
             fg="#5b21b6",
@@ -374,7 +374,7 @@ class PhotoEnhancerSketchApp:
         """BƯỚC 3: XUẤT SẢN PHẨM & BÁO CÁO."""
         frame = tk.LabelFrame(
             self.ctrl_panel,
-            text=" BƯỚC 3: XUẤT SẢN PHẨM & BÁO CÁO ",
+            text="XUẤT SẢN PHẨM & BÁO CÁO ",
             font=("Segoe UI", 10, "bold"),
             bg="#ffffff",
             fg="#be123c",
@@ -386,7 +386,7 @@ class PhotoEnhancerSketchApp:
         # Nút 1-Chạm All-in-One
         tk.Button(
             frame,
-            text="🚀 QUY TRÌNH 1-CHẠM (ALL-IN-ONE)\nẢnh chụp ➔ Tranh vẽ nét hoàn chỉnh",
+            text="Ảnh chụp ➔ Tranh vẽ nét hoàn chỉnh",
             command=self.action_one_click_all_in_one,
             bg="#be123c",
             fg="white",
@@ -396,7 +396,7 @@ class PhotoEnhancerSketchApp:
 
         tk.Button(
             frame,
-            text="📊 Xem biểu đồ Histogram Trước - Sau",
+            text="Xem biểu đồ Histogram Trước - Sau",
             command=self.action_show_histogram,
             bg="#0284c7",
             fg="white",
@@ -406,7 +406,7 @@ class PhotoEnhancerSketchApp:
 
         tk.Button(
             frame,
-            text="💾 Lưu tranh kết quả",
+            text="Lưu tranh kết quả",
             command=self.save_image,
             bg="#16a34a",
             fg="white",
